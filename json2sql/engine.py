@@ -8,6 +8,9 @@ class SQLGenerator(object):
     To Generate SQL query from JSON data
     """
 
+    #Mapping of field to join name assigned to table
+    self._join_names = {}
+
     # Constants to map JSON keys
     WHERE_CONDITION = 'condition'
     AND_CONDITION = 'and'
@@ -63,7 +66,7 @@ class SQLGenerator(object):
         Initialise basic params
         :param base_table: (string) table to be used with FROM clause in SQL
         :param db_config: (dict) containing db config required to create connections
-        :param field_mapping: (dict) to map field id's to field data(table name)
+        :param field_mapping: (dict) to map field name's to table name
         :param paths: information about paths from a model to reach to a specific model and when to stop
         :return: None
         """
@@ -90,9 +93,9 @@ class SQLGenerator(object):
     def generate_sql(self, data, fields):
         """
         Create SQL query from provided json
-        :param data: Actual JSON containing nested condition data
-        :param fields: All the fields involved in the conditions data
-        :return: Finalized SQL query unicode
+        :param data: (dict) Actual JSON containing nested condition data
+        :param fields: (list) Name of all the fields involved in the conditions data
+        :return: (unicode) Finalized SQL query unicode
         """
 
         join_phrase = self._create_join(fields)
@@ -104,19 +107,29 @@ class SQLGenerator(object):
                     where_phrase=where_phrase
                 )
 
+    def _create_join(self, fields):
+        """
+        Creates join phrase for SQL using the field, field_mapping and joins. 
+        Updates _join_names to assign names to each field to be used by _create_where
+        :param fields: (list) Fields for which joins need to be created
+        :return: (unicode) unicode string that can be appended to SQL just after FROM <table_name>
+        """
+        raise NotImplementedError
+
     def _create_where(self, data):
         """
         This function uses recursion to generate sql for nested conditions.
         Every key in the dict will map to a function by referencing WHERE_CONDITION_MAPPING.
         The function mapped to that key will be responsible for generating SQL for that part of the data.
-        :param data: Conditions data which needs to be parsed to generate SQL
-        :return: Unicode representation of data into SQL
+        :param data: (dict) Conditions data which needs to be parsed to generate SQL
+        :return: (unicode) Unicode representation of data into SQL
         """
         raise NotImplementedError
 
     def _generate_where_phrase(self, where):
         """
         Function to generate a single condition(column1 = 1, or column1 BETWEEN 1 and 5) based on data provided.
+        Uses _join_names to assign table_name to a field in query.
         :param where: (dict) will contain required data to generate condition. 
                       Sample Format: {"field": , "primary_value": ,"operator": , "secondary_value"(optional): }
         :return: (unicode) SQL condition in unicode represented by where data
