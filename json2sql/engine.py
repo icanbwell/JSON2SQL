@@ -1,14 +1,12 @@
 from collections import namedtuple
-import datetime
-import MySQLdb
 
 
-class SQLGenerator(object):
+class JSON2SQLGenerator(object):
     """
     To Generate SQL query from JSON data
     """
 
-    #Mapping of field to join name assigned to table
+    # Mapping of field to join name assigned to table
     self._join_names = {}
 
     # Constants to map JSON keys
@@ -19,10 +17,10 @@ class SQLGenerator(object):
     EXISTS_CONDITION = 'exists'
 
     # Supported data types by plugin
-    INTEGER='integer',
-    STRING='string',
-    DATE='date',
-    DATE_TIME='datetime',
+    INTEGER='integer'
+    STRING='string'
+    DATE='date'
+    DATE_TIME='datetime'
     BOOLEAN='boolean'
     NULLBOOLEAN='nullboolean'
     CHOICE='choice'
@@ -60,22 +58,15 @@ class SQLGenerator(object):
         multichoice=MULTICHOICE
     )
 
-
-    def __init__(self, db_config, base_table, field_mapping, paths):
+    def __init__(self, base_table, field_mapping, paths):
         """
         Initialise basic params
-        :param base_table: (string) table to be used with FROM clause in SQL
-        :param db_config: (dict) containing db config required to create connections
-        :param field_mapping: (dict) to map field name's to table name
-        :param paths: information about paths from a model to reach to a specific model and when to stop
+        :param base_table: (string) Exact table name as in DB to be used with FROM clause in SQL.
+        :param field_mapping: (dict) To map field id's to field name and table name. 
+                              Each field id should be mapped to a tuple (field_name, table_name)
+        :param paths: (dict) Information about paths from a model to reach to a specific model and when to stop.
         :return: None
         """
-
-        self.db_name = db_config['name']
-        self.db_port = db_config['port']
-        self.db_host = db_config['host']
-        self.db_user = db_config['user']
-        self.db_password = db_config['password']
 
         self.base_table = base_table
         self.field_maping = field_mapping
@@ -84,10 +75,10 @@ class SQLGenerator(object):
         # Mapping to be used to parse various combination keywords data
         self.WHERE_CONDITION_MAPPING = {
             self.WHERE_CONDITION: self._generate_where_phrase,
-            self.AND_CONDITION: self._parse_and_in_where,
-            self.OR_CONDITION: self._parse_or_in_where,
-            self.NOT_CONDITION: self._parse_not_in_where,
-            self.EXISTS_CONDITION: self._parse_exists_in_where,
+            self.AND_CONDITION: self._parse_and,
+            self.OR_CONDITION: self._parse_or,
+            self.NOT_CONDITION: self._parse_not,
+            self.EXISTS_CONDITION: self._parse_exists,
         }
 
     def generate_sql(self, data, fields):
@@ -102,10 +93,10 @@ class SQLGenerator(object):
         where_phrase = self._create_where(data)
 
         return u'SELECT COUNT(*) FROM {base_table} {join_phrase} WHERE {where_phrase}'.format(
-                    join_phrase=join_phrase,
-                    base_table=base_table,
-                    where_phrase=where_phrase
-                )
+            join_phrase=join_phrase,
+            base_table=base_table,
+            where_phrase=where_phrase
+        )
 
     def _create_join(self, fields):
         """
@@ -139,7 +130,7 @@ class SQLGenerator(object):
         # which could be added to a where clause in the final SQL
         raise NotImplementedError
 
-    def _parse_and_in_where(self, data):
+    def _parse_and(self, data):
         """
         To parse the AND condition for where clause.
         :param data: (list) contains list of data for conditions that need to be ANDed
@@ -148,7 +139,7 @@ class SQLGenerator(object):
         """
         raise NotImplementedError
 
-    def _parse_or_in_where(self, data):
+    def _parse_or(self, data):
         """
         To parse the OR condition for where clause.
         :param data: (list) contains list of data for conditions that need to be ORed
@@ -157,7 +148,7 @@ class SQLGenerator(object):
         """
         raise NotImplementedError
 
-    def _parse_exists_in_where(self, data):
+    def _parse_exists(self, data):
         """
         To parse the EXISTS check/wrapper for where clause.
         :param data: (dict) contains a nested dict of data for conditions that 
@@ -167,7 +158,7 @@ class SQLGenerator(object):
         """
         raise NotImplementedError
    
-    def _parse_not_in_where(self, data):
+    def _parse_not(self, data):
         """
         To parse the NOT check/wrapper for where clause.
         :param data: (dict) contains a nested dict of data for conditions that 
@@ -177,16 +168,16 @@ class SQLGenerator(object):
         """
         raise NotImplementedError
    
-    def _parse_conditions_in_where(self, condition, data):
+    def _parse_conditions(self, condition, data):
         """
-        To parse AND, NOT, OR, EXISTS data and 
+        To parse AND, NOT, OR, EXISTS data and
         deligate to proper functions to generate combinations according to condition provided.
         NOTE: This function doesn't do actual parsing. 
               All it does is deligate to a function that would parse the data.
-              The main logic for parsing only resides in _generate_where_phrase 
+              The main logic for parsing only resides in _generate_where_phrase
               as every condition is similar, its just how we group them
         :param condition: (string) the condition to use to combine the condition represented by data
-        :param data: (dict|list) list or nested dict of condition to be combined
+        :param data: (list) list conditions to be combined or parsed
         :return: (unicode) unicode string that could be placed in the SQL
         """
         raise NotImplementedError
