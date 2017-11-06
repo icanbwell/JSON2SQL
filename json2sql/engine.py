@@ -69,6 +69,28 @@ class JSON2SQLGenerator(object):
 
         self.field_maping = parse_field_mapping(field_mapping)
         self.paths = parse_path_mapping(paths)
+        self.paths = {
+            "clients_client": {
+                "parent_column": "company_id",
+                "parent_table": "accounts_bwelluserclientpremember",
+                "child_column": "id"
+            },
+            "accounts_bwelluserclientpremember": {
+                "parent_column": "id",
+                "parent_table": "accounts_bwelluser",
+                "child_column": "user_id"
+            },
+            "accounts_bwelluser": {
+                "parent_column": "user_id",
+                "parent_table": "patients_member",
+                "child_column": "id"
+            },
+            "patients_member": {
+                "parent_column": "",
+                "parent_table": "",
+                "child_column": ""
+            }
+        }
 
         # Mapping to be used to parse various combination keywords data
         self.WHERE_CONDITION_MAPPING = {
@@ -97,6 +119,25 @@ class JSON2SQLGenerator(object):
             where_phrase=where_phrase
         )
 
+    def _join_member_table(self, table):
+        """
+        Function to find member table path from child table
+        :param table: child table name
+        :return: path from child table to member table.
+        """
+        table_data = self.paths.get(table)
+        query = ''
+        if table_data['parent_table']:
+            query = self._join_member_table(table_data['parent_table'])
+            query = 'inner join {parent_table} on {parent_table}.{parent_column} = {child_table}.{child_column} {query}'.format(
+                parent_table=table_data['parent_table'],
+                parent_column=table_data['parent_column'],
+                child_column=table_data['child_column'],
+                query=query,
+                child_table=table
+            )
+        return query
+
     def _create_join(self, fields):
         """
         Creates join phrase for SQL using the field, field_mapping and joins. 
@@ -104,7 +145,11 @@ class JSON2SQLGenerator(object):
         :param fields: (list) Fields for which joins need to be created
         :return: (unicode) unicode string that can be appended to SQL just after FROM <table_name>
         """
-        raise NotImplementedError
+        query = ''
+        for field in fields:
+            mapping = next((item for item in self.field_maping if item["id"] == field), None)
+            query += self._join_member_table(mapping['table_name'])
+        return query
 
     def _create_where(self, data):
         """
