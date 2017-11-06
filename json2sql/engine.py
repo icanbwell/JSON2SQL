@@ -17,14 +17,14 @@ class JSON2SQLGenerator(object):
     EXISTS_CONDITION = 'exists'
 
     # Supported data types by plugin
-    INTEGER='integer'
-    STRING='string'
-    DATE='date'
-    DATE_TIME='datetime'
-    BOOLEAN='boolean'
-    NULLBOOLEAN='nullboolean'
-    CHOICE='choice'
-    MULTICHOICE='multichoice'
+    INTEGER = 'integer'
+    STRING = 'string'
+    DATE = 'date'
+    DATE_TIME = 'datetime'
+    BOOLEAN = 'boolean'
+    NULLBOOLEAN = 'nullboolean'
+    CHOICE = 'choice'
+    MULTICHOICE = 'multichoice'
 
     # Supported operators
     VALUE_OPERATORS = namedtuple('VALUE_OPRATORS', [
@@ -58,19 +58,17 @@ class JSON2SQLGenerator(object):
         multichoice=MULTICHOICE
     )
 
-    def __init__(self, base_table, field_mapping, paths):
+    def __init__(self, field_mapping, paths):
         """
-        Initialise basic params
-        :param base_table: (string) Exact table name as in DB to be used with FROM clause in SQL.
-        :param field_mapping: (dict) To map field id's to field name and table name. 
-                              Each field id should be mapped to a tuple (field_name, table_name)
-        :param paths: (dict) Information about paths from a model to reach to a specific model and when to stop.
+        Initialise basic params.
+        :param field_mapping: (list) List of tuples containing (field_identifier, field_name, table_name).
+        :param paths: (list) List of tuples containig (join_table, join_field, parent_table, parent_field).
+                      Information about paths from a model to reach to a specific model and when to stop.
         :return: None
         """
 
-        self.base_table = base_table
-        self.field_maping = field_mapping
-        self.paths = paths
+        self.field_maping = parse_field_mapping(field_mapping)
+        self.paths = parse_path_mapping(paths)
 
         # Mapping to be used to parse various combination keywords data
         self.WHERE_CONDITION_MAPPING = {
@@ -81,16 +79,17 @@ class JSON2SQLGenerator(object):
             self.EXISTS_CONDITION: self._parse_exists,
         }
 
-    def generate_sql(self, data, fields):
+    def generate_sql(self, data, base_table):
         """
         Create SQL query from provided json
-        :param data: (dict) Actual JSON containing nested condition data
-        :param fields: (list) Name of all the fields involved in the conditions data
+        :param data: (dict) Actual JSON containing nested condition data.
+                     Must contain two keys - fields(contains list of fields involved in SQL) and where_data(JSON data)
+        :param base_table: (string) Exact table name as in DB to be used with FROM clause in SQL.
         :return: (unicode) Finalized SQL query unicode
         """
 
-        join_phrase = self._create_join(fields)
-        where_phrase = self._create_where(data)
+        join_phrase = self._create_join(data['fields'])
+        where_phrase = self._create_where(data['where_data'])
 
         return u'SELECT COUNT(*) FROM {base_table} {join_phrase} WHERE {where_phrase}'.format(
             join_phrase=join_phrase,
