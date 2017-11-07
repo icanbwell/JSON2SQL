@@ -6,7 +6,8 @@ class JSON2SQLGenerator(object):
     To Generate SQL query from JSON data
     """
 
-    # Mapping of field to join name assigned to table
+    # Mapping of field to join name assigned to table.
+    # Format should be field_identifier: table alias
     self._join_names = {}
 
     # Constants to map JSON keys
@@ -150,7 +151,7 @@ class JSON2SQLGenerator(object):
     def _parse_exists(self, data):
         """
         To parse the EXISTS check/wrapper for where clause.
-        :param data: (dict) contains a nested dict of data for conditions that 
+        :param data: (list) contains a list of single element of data for conditions that 
                             need to be wrapped with a EXISTS check in WHERE clause
         :return: (unicode) unicode containing SQL condition represeted by data with EXISTS check. 
                  This SQL can be directly placed in a SQL query
@@ -160,7 +161,7 @@ class JSON2SQLGenerator(object):
     def _parse_not(self, data):
         """
         To parse the NOT check/wrapper for where clause.
-        :param data: (dict) contains a nested dict of data for conditions that 
+        :param data: (list) contains a list of single element of data for conditions that 
                             need to be wrapped with a NOT check in WHERE clause
         :return: (unicode) unicode containing SQL condition represeted by data with NOT check. 
                  This SQL can be directly placed in a SQL query
