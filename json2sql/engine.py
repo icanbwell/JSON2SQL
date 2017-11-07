@@ -68,8 +68,8 @@ class JSON2SQLGenerator(object):
         :return: None
         """
 
-        self.field_mapping = parse_field_mapping(field_mapping)
-        self.paths = parse_path_mapping(paths)
+        self.field_mapping = self.parse_field_mapping(field_mapping)
+        self.paths = self.parse_path_mapping(paths)
 
         # Mapping to be used to parse various combination keywords data
         self.WHERE_CONDITION_MAPPING = {
