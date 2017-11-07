@@ -62,13 +62,13 @@ class JSON2SQLGenerator(object):
     def __init__(self, field_mapping, paths):
         """
         Initialise basic params.
-        :param field_mapping: (list) List of tuples containing (field_identifier, field_name, table_name).
-        :param paths: (list) List of tuples containig (join_table, join_field, parent_table, parent_field).
+        :param field_mapping: (tuple) tuple of tuples containing (field_identifier, field_name, table_name).
+        :param paths: (tuple) tuple of tuples containig (join_table, join_field, parent_table, parent_field).
                       Information about paths from a model to reach to a specific model and when to stop.
         :return: None
         """
 
-        self.field_maping = parse_field_mapping(field_mapping)
+        self.field_mapping = parse_field_mapping(field_mapping)
         self.paths = parse_path_mapping(paths)
 
         # Mapping to be used to parse various combination keywords data
@@ -179,5 +179,21 @@ class JSON2SQLGenerator(object):
         :param condition: (string) the condition to use to combine the condition represented by data
         :param data: (list) list conditions to be combined or parsed
         :return: (unicode) unicode string that could be placed in the SQL
+        """
+        raise NotImplementedError
+
+    def parse_field_mapping(self, field_mapping):
+        """
+        Converts tuple of tuples to dict.
+        :param field_mapping: (tuple) tuple of tuples in the format ((field_identifier, field_name, table_name),)
+        :return: (dict) dict in the format {'field_identifier': {'field_name': , 'table_name': }}
+        """
+        raise NotImplementedError
+
+    def parse_paths_mapping(self, paths):
+        """
+        Converts tuple of tuples to dict.
+        :param paths: (tuple) tuple of tuples in the format ((join_table, join_field, parent_table, parent_field),)
+        :return: (dict) dict in the format {'join_table': {'join_field': , 'parent_table': , 'parent_field': }}
         """
         raise NotImplementedError
