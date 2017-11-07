@@ -69,28 +69,6 @@ class JSON2SQLGenerator(object):
 
         self.field_maping = parse_field_mapping(field_mapping)
         self.paths = parse_path_mapping(paths)
-        self.paths = {
-            "clients_client": {
-                "parent_column": "company_id",
-                "parent_table": "accounts_bwelluserclientpremember",
-                "child_column": "id"
-            },
-            "accounts_bwelluserclientpremember": {
-                "parent_column": "id",
-                "parent_table": "accounts_bwelluser",
-                "child_column": "user_id"
-            },
-            "accounts_bwelluser": {
-                "parent_column": "user_id",
-                "parent_table": "patients_member",
-                "child_column": "id"
-            },
-            "patients_member": {
-                "parent_column": "",
-                "parent_table": "",
-                "child_column": ""
-            }
-        }
 
         # Mapping to be used to parse various combination keywords data
         self.WHERE_CONDITION_MAPPING = {
