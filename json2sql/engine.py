@@ -1,4 +1,7 @@
+import logging
 from collections import namedtuple
+
+logger = logging.getLogger(u'JSON2SQLGenerator')
 
 
 class JSON2SQLGenerator(object):
@@ -7,7 +10,7 @@ class JSON2SQLGenerator(object):
     """
 
     # Mapping of field to join name assigned to table
-    self._join_names = {}
+    joined_table_names = set()
 
     # Constants to map JSON keys
     WHERE_CONDITION = 'condition'
@@ -104,16 +107,26 @@ class JSON2SQLGenerator(object):
         :return: path from child table to member table.
         """
         table_data = self.paths.get(table)
-        query = ''
-        if table_data['parent_table']:
-            query = self._join_member_table(table_data['parent_table'])
-            query = 'inner join {parent_table} on {parent_table}.{parent_column} = {child_table}.{child_column} {query}'.format(
-                parent_table=table_data['parent_table'],
-                parent_column=table_data['parent_column'],
-                child_column=table_data['child_column'],
-                query=query,
-                child_table=table
-            )
+        query = bytes()
+        parent_table = table_data['parent_table']
+        parent_column = table_data['parent_column']
+        if table_data:
+            if '{parent_table}.{parent_column}'.format(parent_table=parent_table, parent_column=parent_column) not in self.joined_table_names:
+                if parent_table != 'patients_member':
+                    query = self._join_member_table(parent_table)
+                query = 'inner join {parent_table} on {parent_table}.{parent_column} = {child_table}.{child_column} {query}'.format(
+                    parent_table=parent_table,
+                    parent_column=parent_column,
+                    child_column=table_data['child_column'],
+                    query=query,
+                    child_table=table
+                )
+                self.joined_table_names.add('{parent_table}.{parent_column}'.format(
+                    parent_table=parent_table,
+                    parent_column=parent_column
+                ))
+        else:
+            logger.error('Table Data not found in paths for table name [{}]'.format(table))
         return query
 
     def _create_join(self, fields):
@@ -125,8 +138,7 @@ class JSON2SQLGenerator(object):
         """
         query = ''
         for field in fields:
-            mapping = next((item for item in self.field_maping if item["id"] == field), None)
-            query += self._join_member_table(mapping['table_name'])
+            query += self._join_member_table(self.field_maping[field]['table_name'])
         return query
 
     def _create_where(self, data):
