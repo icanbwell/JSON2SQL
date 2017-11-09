@@ -9,7 +9,7 @@ class JSON2SQLGenerator(object):
     To Generate SQL query from JSON data
     """
 
-    # Mapping of field to join name assigned to table
+    # Names of the joined tables currently in query in the format ('{table_name}.{field_name}')
     joined_table_names = set()
 
     # Constants to map JSON keys
@@ -108,9 +108,9 @@ class JSON2SQLGenerator(object):
         """
         table_data = self.paths.get(table)
         query = ''
-        parent_table = table_data['parent_table']
-        parent_column = table_data['parent_column']
         if table_data:
+            parent_table = table_data['parent_table']
+            parent_column = table_data['parent_column']
             if '{parent_table}.{parent_column}'.format(parent_table=parent_table, parent_column=parent_column) not in self.joined_table_names:
                 if parent_table != 'patients_member':
                     query = self._join_member_table(parent_table)
