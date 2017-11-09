@@ -107,23 +107,23 @@ class JSON2SQLGenerator(object):
         :return: path from child table to member table.
         """
         table_data = self.paths.get(table)
-        query = bytes()
+        query = ''
         parent_table = table_data['parent_table']
         parent_column = table_data['parent_column']
         if table_data:
             if '{parent_table}.{parent_column}'.format(parent_table=parent_table, parent_column=parent_column) not in self.joined_table_names:
                 if parent_table != 'patients_member':
                     query = self._join_member_table(parent_table)
-                query = 'inner join {parent_table} on {parent_table}.{parent_column} = {child_table}.{child_column} {query}'.format(
+                query = '{query} inner join {join_table} on {join_table}.{join_column} = {parent_table}.{parent_column}'.format(
                     parent_table=parent_table,
                     parent_column=parent_column,
-                    child_column=table_data['child_column'],
+                    join_column=table_data['join_column'],
                     query=query,
-                    child_table=table
+                    join_table=table
                 )
-                self.joined_table_names.add('{parent_table}.{parent_column}'.format(
-                    parent_table=parent_table,
-                    parent_column=parent_column
+                self.joined_table_names.add('{join_table}.{join_column}'.format(
+                    join_table=table,
+                    join_column=table_data['join_column']
                 ))
         else:
             logger.error('Table Data not found in paths for table name [{}]'.format(table))
