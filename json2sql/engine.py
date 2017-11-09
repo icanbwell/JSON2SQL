@@ -1,4 +1,7 @@
+import logging
 from collections import namedtuple
+
+logger = logging.getLogger(u'JSON2SQLGenerator')
 
 
 class JSON2SQLGenerator(object):
@@ -6,9 +9,8 @@ class JSON2SQLGenerator(object):
     To Generate SQL query from JSON data
     """
 
-    # Mapping of field to join name assigned to table.
-    # Format should be field_identifier: table alias
-    self._join_names = {}
+    # Names of the joined tables currently in query in the format ('{table_name}.{field_name}')
+    joined_table_names = set()
 
     # Constants to map JSON keys
     WHERE_CONDITION = 'condition'
@@ -98,6 +100,35 @@ class JSON2SQLGenerator(object):
             where_phrase=where_phrase
         )
 
+    def _join_member_table(self, table):
+        """
+        Function to find member table path from child table
+        :param table: child table name
+        :return: path from child table to member table.
+        """
+        table_data = self.paths.get(table)
+        query = ''
+        if table_data:
+            parent_table = table_data['parent_table']
+            parent_column = table_data['parent_column']
+            if '{parent_table}.{parent_column}'.format(parent_table=parent_table, parent_column=parent_column) not in self.joined_table_names:
+                if parent_table != 'patients_member':
+                    query = self._join_member_table(parent_table)
+                query = '{query} inner join {join_table} on {join_table}.{join_column} = {parent_table}.{parent_column}'.format(
+                    parent_table=parent_table,
+                    parent_column=parent_column,
+                    join_column=table_data['join_column'],
+                    query=query,
+                    join_table=table
+                )
+                self.joined_table_names.add('{join_table}.{join_column}'.format(
+                    join_table=table,
+                    join_column=table_data['join_column']
+                ))
+        else:
+            logger.error('Table Data not found in paths for table name [{}]'.format(table))
+        return query
+
     def _create_join(self, fields):
         """
         Creates join phrase for SQL using the field, field_mapping and joins. 
@@ -105,7 +136,10 @@ class JSON2SQLGenerator(object):
         :param fields: (list) Fields for which joins need to be created
         :return: (unicode) unicode string that can be appended to SQL just after FROM <table_name>
         """
-        raise NotImplementedError
+        query = ''
+        for field in fields:
+            query += self._join_member_table(self.field_maping[field]['table_name'])
+        return query
 
     def _create_where(self, data):
         """
@@ -151,7 +185,7 @@ class JSON2SQLGenerator(object):
     def _parse_exists(self, data):
         """
         To parse the EXISTS check/wrapper for where clause.
-        :param data: (list) contains a list of single element of data for conditions that 
+        :param data: (list) contains a list of single element of data for conditions that
                             need to be wrapped with a EXISTS check in WHERE clause
         :return: (unicode) unicode containing SQL condition represeted by data with EXISTS check. 
                  This SQL can be directly placed in a SQL query
@@ -161,7 +195,7 @@ class JSON2SQLGenerator(object):
     def _parse_not(self, data):
         """
         To parse the NOT check/wrapper for where clause.
-        :param data: (list) contains a list of single element of data for conditions that 
+        :param data: (list) contains a list of single element of data for conditions that
                             need to be wrapped with a NOT check in WHERE clause
         :return: (unicode) unicode containing SQL condition represeted by data with NOT check. 
                  This SQL can be directly placed in a SQL query
