@@ -110,14 +110,14 @@ class JSON2SQLGenerator(object):
         query = ''
         if table_data:
             parent_table = table_data['parent_table']
-            parent_column = table_data['parent_column']
-            if '{parent_table}.{parent_column}'.format(parent_table=parent_table, parent_column=parent_column) not in self.joined_table_names:
+            join_column = table_data['join_column']
+            if '{join_table}.{join_column}'.format(join_table=table, join_column=join_column) not in self.joined_table_names:
                 if parent_table != 'patients_member':
                     query = self._join_member_table(parent_table)
                 query = '{query} inner join {join_table} on {join_table}.{join_column} = {parent_table}.{parent_column}'.format(
                     parent_table=parent_table,
-                    parent_column=parent_column,
-                    join_column=table_data['join_column'],
+                    parent_column=table_data['parent_column'],
+                    join_column=join_column,
                     query=query,
                     join_table=table
                 )
@@ -138,7 +138,7 @@ class JSON2SQLGenerator(object):
         """
         query = ''
         for field in fields:
-            query += self._join_member_table(self.field_maping[field]['table_name'])
+            query += self._join_member_table(self.field_mapping[field]['table_name'])
         return query
 
     def _create_where(self, data):
