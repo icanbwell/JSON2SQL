@@ -58,7 +58,7 @@ class JSON2SQLGenerator(object):
     DATA_TYPES = namedtuple('DATA_TYPES', [
         'integer', 'string', 'date', 'date_time', 'boolean', 'nullboolean',
         'choice', 'multichoice'
-        ])(
+    ])(
         integer=INTEGER,
         string=STRING,
         date=DATE,
@@ -184,7 +184,6 @@ class JSON2SQLGenerator(object):
         else:
             # Get optional secondary value
             secondary_value = where.get('secondary_value')
-
             # Check if secondary_value is present for binary operators
             if operator in self.BINARY_OPERATORS and not secondary_value:
                 raise ValueError(
@@ -254,6 +253,7 @@ class JSON2SQLGenerator(object):
         :return: (string) data type of the field
         """
         return self.field_mapping[field]['data_type']
+
     def _get_table_name(self, field):
         """
         Gets table name for the field from self.field_mapping configured in __init__
@@ -377,4 +377,3 @@ class JSON2SQLGenerator(object):
                 self.PARENT_COLUMN: path[3]
             } for path in paths
         }
-
