@@ -13,7 +13,7 @@ class JSON2SQLGenerator(object):
     joined_table_names = set()
 
     # Constants to map JSON keys
-    WHERE_CONDITION = 'condition'
+    WHERE_CONDITION = 'where'
     AND_CONDITION = 'and'
     OR_CONDITION = 'or'
     NOT_CONDITION = 'not'
@@ -28,6 +28,14 @@ class JSON2SQLGenerator(object):
     NULLBOOLEAN = 'nullboolean'
     CHOICE = 'choice'
     MULTICHOICE = 'multichoice'
+
+    CONVERSION_REQUIRED = [
+        STRING, DATE, DATE_TIME
+    ]
+
+    # Maintain a set of binary operators
+    BETWEEN = 'between'
+    BINARY_OPERATORS = (BETWEEN, )
 
     # Supported operators
     VALUE_OPERATORS = namedtuple('VALUE_OPRATORS', [
@@ -44,13 +52,13 @@ class JSON2SQLGenerator(object):
         is_op='IS',
         in_op='IN',
         like='LIKE',
-        between='between'
+        between=BETWEEN
     )
 
     DATA_TYPES = namedtuple('DATA_TYPES', [
-        'integer', 'string', 'date', 'date_time', 'boolean', 'nullboolean'
+        'integer', 'string', 'date', 'date_time', 'boolean', 'nullboolean',
         'choice', 'multichoice'
-    ])(
+        ])(
         integer=INTEGER,
         string=STRING,
         date=DATE,
@@ -60,6 +68,16 @@ class JSON2SQLGenerator(object):
         choice=CHOICE,
         multichoice=MULTICHOICE
     )
+
+    # Constants
+    FIELD_NAME = 'field_name'
+    TABLE_NAME = 'table_name'
+    DATA_TYPE = 'data_type'
+
+    JOIN_TABLE = 'join_table'
+    JOIN_COLUMN = 'join_column'
+    PARENT_TABLE = 'parent_table'
+    PARENT_COLUMN = 'parent_column'
 
     def __init__(self, field_mapping, paths):
         """
@@ -71,7 +89,7 @@ class JSON2SQLGenerator(object):
         """
 
         self.field_mapping = self.parse_field_mapping(field_mapping)
-        self.paths = self.parse_path_mapping(paths)
+        self.paths = self.parse_paths_mapping(paths)
 
         # Mapping to be used to parse various combination keywords data
         self.WHERE_CONDITION_MAPPING = {
@@ -90,7 +108,7 @@ class JSON2SQLGenerator(object):
         :param base_table: (string) Exact table name as in DB to be used with FROM clause in SQL.
         :return: (unicode) Finalized SQL query unicode
         """
-
+        self.base_table = base_table
         join_phrase = self._create_join(data['fields'])
         where_phrase = self._create_where(data['where_data'])
 
@@ -109,24 +127,26 @@ class JSON2SQLGenerator(object):
         table_data = self.paths.get(table)
         query = ''
         if table_data:
-            parent_table = table_data['parent_table']
-            join_column = table_data['join_column']
+            parent_table = table_data[self.PARENT_TABLE]
+            join_column = table_data[self.JOIN_COLUMN]
             if '{join_table}.{join_column}'.format(join_table=table, join_column=join_column) not in self.joined_table_names:
-                if parent_table != 'patients_member':
+                if parent_table != self.base_table:
                     query = self._join_member_table(parent_table)
-                query = '{query} inner join {join_table} on {join_table}.{join_column} = {parent_table}.{parent_column}'.format(
+                query = u'{query} inner join {join_table} on {join_table}.{join_column} = {parent_table}.{parent_column}'.format(
                     parent_table=parent_table,
-                    parent_column=table_data['parent_column'],
+                    parent_column=table_data[self.PARENT_COLUMN],
                     join_column=join_column,
                     query=query,
                     join_table=table
                 )
                 self.joined_table_names.add('{join_table}.{join_column}'.format(
                     join_table=table,
-                    join_column=table_data['join_column']
+                    join_column=table_data[self.JOIN_COLUMN]
                 ))
         else:
-            logger.error('Table Data not found in paths for table name [{}]'.format(table))
+            logger.error(
+                'Table Data not found in paths for table name [{}]'.format(table)
+            )
         return query
 
     def _create_join(self, fields):
@@ -138,7 +158,7 @@ class JSON2SQLGenerator(object):
         """
         query = ''
         for field in fields:
-            query += self._join_member_table(self.field_mapping[field]['table_name'])
+            query += self._join_member_table(self.field_mapping[field][self.table_name])
         return query
 
     def _create_where(self, data):
@@ -151,6 +171,29 @@ class JSON2SQLGenerator(object):
         """
         raise NotImplementedError
 
+    def _get_validated_data(self, where):
+        try:
+            data_type = where['data_type'].lower()
+            operator = where['operator'].lower()
+            value = where['value']
+            field = where['field'].lower()
+        except KeyError as e:
+            raise KeyError(
+                u'Missing key - [{}] in where condition dict'.format(e.args[0])
+            )
+        else:
+            # Get optional secondary value
+            secondary_value = where.get('secondary_value')
+
+            # Check if secondary_value is present for binary operators
+            if operator in self.BINARY_OPERATORS and not secondary_value:
+                raise ValueError(
+                    u'Missing key - [secondary_value] for operator - [{}]'.format(
+                        operator
+                    )
+                )
+            return data_type, operator, value, field, secondary_value
+
     def _generate_where_phrase(self, where):
         """
         Function to generate a single condition(column1 = 1, or column1 BETWEEN 1 and 5) based on data provided.
@@ -159,10 +202,101 @@ class JSON2SQLGenerator(object):
                       Sample Format: {"field": , "primary_value": ,"operator": , "secondary_value"(optional): }
         :return: (unicode) SQL condition in unicode represented by where data
         """
-        # In this method the main logic will reside for 
-        # conveting a given data in the form dict to a actual SQL condtion,
-        # which could be added to a where clause in the final SQL
-        raise NotImplementedError
+        # Check data valid
+        if not isinstance(where, dict):
+            raise ValueError(
+                'Where condition data must be a dict. Found [{}]'.format(
+                    type(where)
+                )
+            )
+        # Get all the data elements required and validate them
+        data_type, operator, value, field, secondary_value = self._get_validated_data(where)
+        # Get db field name
+        field_name = self.field_mapping[field]['field_name']
+        # Get corresponding SQL operator
+        sql_operator = self._get_sql_operator(operator)
+        # Get data type and table name from field_mapping
+        data_type = self._get_data_type(field)
+        table = self._get_table_name(field)
+        # Check if the primary value and data_type are in sync
+        self._sanitize_value(value, data_type)
+        # Check if the secondary_value and data_type are in sync
+        if secondary_value:
+            self._sanitize_value(secondary_value, data_type)
+        # Make value sql proof. For ex: if value is string or data convert it to '<value>'
+        sql_value, secondary_sql_value = self._convert_values(
+            [value, secondary_value], data_type
+        )
+        # Generate SQL phrase
+        if sql_operator == self.BETWEEN:
+            where_phrase = u'`{table}`.`{field}` {operator} {primary_value} AND {secondary_value}'.format(
+                table=table, field=field_name, operator=sql_operator, 
+                value=sql_value, secondary_value=secondary_sql_value
+            )
+        else:
+            where_phrase = u'`{table}`.`{field}` {operator} {value}'.format(
+                operator=sql_operator, table=table, field=field_name, value=sql_value, 
+            )
+        return where_phrase
+
+    def _get_sql_operator(self, operator):
+        """
+        Gets operator to be used in SQL from the string value assigned to it in VALUE_OPERATORS.
+        :param operator: (string|unicode) Operator string that maps to a SQL operator
+        :return: (string) SQL operator mapping to operator string.
+        """
+        return getattr(self.VALUE_OPERATORS, operator)
+
+    def _get_data_type(self, field):
+        """
+        Gets data type for the field from self.field_mapping configured in __init__
+        :param field: (int|string) field identifier that is used as key in self.field_mapping
+        :return: (string) data type of the field
+        """
+        return self.field_mapping[field]['data_type']
+    def _get_table_name(self, field):
+        """
+        Gets table name for the field from self.field_mapping configured in __init__
+        :param field: (int|string) Field identifier that is used as key in self.field_mapping
+        :return: (string|unicode) Name of the table of the field        
+        """
+        return self.field_mapping[field]['table_name']
+
+    def _convert_values(self, values, data_type):
+        """
+        Converts values for SQL query. Adds '' string, date, datetime values
+        :param values: (iterable) Any instance of iterable values of same data type that need conversion
+        :param data_type: (string) Data type of the values provided
+        """
+        wrapper = '\'{value}\'' if data_type in self.CONVERSION_REQUIRED else '{value}'
+        return (wrapper.format(value=value) for value in values)
+
+    def _sanitize_value(self, value, data_type):
+        """
+        Validate value with data type
+        :param value: Values that needs to be validated with data type
+        :param data_type: (string) Data type against which the value will be compared
+        :return: None
+        """
+        if data_type == self.INTEGER:
+            try:
+                int(value)
+            except ValueError:
+                raise ValueError(
+                    'Invalid value -[{}] for data_type - [{}]'.format(
+                        value, data_type
+                    )
+                )
+        elif data_type == self.DATE:
+            try:
+                datetime.datetime.strptime(value, '%Y-%m-%d')
+            except ValueError as e:
+                raise e            
+        elif data_type == self.DATE_TIME:
+            try:
+                datetime.datetime.strptime(value, '%Y-%m-%dT%H:%M:%S')
+            except ValueError as e:
+                raise e
 
     def _parse_and(self, data):
         """
@@ -219,10 +353,16 @@ class JSON2SQLGenerator(object):
     def parse_field_mapping(self, field_mapping):
         """
         Converts tuple of tuples to dict.
-        :param field_mapping: (tuple) tuple of tuples in the format ((field_identifier, field_name, table_name),)
-        :return: (dict) dict in the format {'field_identifier': {'field_name': , 'table_name': }}
+        :param field_mapping: (tuple) tuple of tuples in the format ((field_identifier, field_name, table_name, data_type),)
+        :return: (dict) dict in the format {'<field_identifier>': {'field_name': <>, 'table_name': <>, 'data_type': <>,}}
         """
-        raise NotImplementedError
+        return {
+            field[0]: {
+               self.FIELD_NAME: field[1], 
+               self.TABLE_NAME: field[2],
+               self.DATA_TYPE: field[3]
+            } for field in field_mapping
+        }        
 
     def parse_paths_mapping(self, paths):
         """
@@ -230,4 +370,11 @@ class JSON2SQLGenerator(object):
         :param paths: (tuple) tuple of tuples in the format ((join_table, join_field, parent_table, parent_field),)
         :return: (dict) dict in the format {'join_table': {'join_field': , 'parent_table': , 'parent_field': }}
         """
-        raise NotImplementedError
+        return {
+            path[0]: {
+                self.JOIN_COLUMN: path[1],
+                self.PARENT_TABLE: path[2],
+                self.PARENT_COLUMN: path[3]
+            } for path in paths
+        }
+
