@@ -1,3 +1,4 @@
+import MySQLdb
 import logging
 from collections import namedtuple
 
@@ -88,8 +89,8 @@ class JSON2SQLGenerator(object):
         :return: None
         """
 
-        self.field_mapping = self.parse_field_mapping(field_mapping)
-        self.paths = self.parse_paths_mapping(paths)
+        self.field_mapping = self._parse_field_mapping(field_mapping)
+        self.paths = self._parse_paths_mapping(paths)
 
         # Mapping to be used to parse various combination keywords data
         self.WHERE_CONDITION_MAPPING = {
@@ -222,6 +223,11 @@ class JSON2SQLGenerator(object):
         # Check if the secondary_value and data_type are in sync
         if secondary_value:
             self._sanitize_value(secondary_value, data_type)
+        # Make string SQL injection proof
+        if data_type == self.STRING:
+            self._sql_injection_proof(value)
+            if secondary_value:
+                self._sql_injection_proof(secondary_value)
         # Make value sql proof. For ex: if value is string or data convert it to '<value>'
         sql_value, secondary_sql_value = self._convert_values(
             [value, secondary_value], data_type
@@ -350,7 +356,7 @@ class JSON2SQLGenerator(object):
         """
         raise NotImplementedError
 
-    def parse_field_mapping(self, field_mapping):
+    def _parse_field_mapping(self, field_mapping):
         """
         Converts tuple of tuples to dict.
         :param field_mapping: (tuple) tuple of tuples in the format ((field_identifier, field_name, table_name, data_type),)
@@ -364,7 +370,7 @@ class JSON2SQLGenerator(object):
             } for field in field_mapping
         }        
 
-    def parse_paths_mapping(self, paths):
+    def _parse_paths_mapping(self, paths):
         """
         Converts tuple of tuples to dict.
         :param paths: (tuple) tuple of tuples in the format ((join_table, join_field, parent_table, parent_field),)
@@ -377,3 +383,11 @@ class JSON2SQLGenerator(object):
                 self.PARENT_COLUMN: path[3]
             } for path in paths
         }
+
+    def _sql_injection_proof(self, value):
+        """
+        Escapes strings to avoid SQL injection attacks
+        :param value: (string|unicode) string that needs to be escaped
+        :return: (string|unicode) escaped string
+        """
+        return MySQLdb.escape_string(value)
