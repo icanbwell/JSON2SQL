@@ -149,7 +149,15 @@ class JSON2SQLGenerator(object):
         :param data: (dict) Conditions data which needs to be parsed to generate SQL
         :return: (unicode) Unicode representation of data into SQL
         """
-        raise NotImplementedError
+        result = ''
+        # Check if data is not blank
+        if data:
+            # Get the first key in dict.
+            condition = next(iter(data))
+            # Call the function mapped to the condition
+            function = self.WHERE_CONDITION_MAPPING.get(next(iter(data)))
+            result = function(data.get(condition))
+        return result
 
     def _generate_where_phrase(self, where):
         """
@@ -160,7 +168,7 @@ class JSON2SQLGenerator(object):
         :return: (unicode) SQL condition in unicode represented by where data
         """
         # In this method the main logic will reside for 
-        # conveting a given data in the form dict to a actual SQL condtion,
+        # converting a given data in the form dict to a actual SQL condtion,
         # which could be added to a where clause in the final SQL
         raise NotImplementedError
 
@@ -171,7 +179,7 @@ class JSON2SQLGenerator(object):
         :return: (unicode) unicode containing SQL condition represeted by data ANDed. 
                  This SQL can be directly placed in a SQL query
         """
-        raise NotImplementedError
+        return self._parse_conditions(self.AND_CONDITION, data)
 
     def _parse_or(self, data):
         """
@@ -180,7 +188,7 @@ class JSON2SQLGenerator(object):
         :return: (unicode) unicode containing SQL condition represeted by data ORed. 
                  This SQL can be directly placed in a SQL query
         """
-        raise NotImplementedError
+        return self._parse_conditions(self.OR_CONDITION, data)
 
     def _parse_exists(self, data):
         """
@@ -190,7 +198,7 @@ class JSON2SQLGenerator(object):
         :return: (unicode) unicode containing SQL condition represeted by data with EXISTS check. 
                  This SQL can be directly placed in a SQL query
         """
-        raise NotImplementedError
+        return self._parse_conditions(self.EXISTS_CONDITION, data)
    
     def _parse_not(self, data):
         """
@@ -200,12 +208,12 @@ class JSON2SQLGenerator(object):
         :return: (unicode) unicode containing SQL condition represeted by data with NOT check. 
                  This SQL can be directly placed in a SQL query
         """
-        raise NotImplementedError
+        return self._parse_conditions(self.NOT_CONDITION, data)
    
     def _parse_conditions(self, condition, data):
         """
         To parse AND, NOT, OR, EXISTS data and
-        deligate to proper functions to generate combinations according to condition provided.
+        delegate to proper functions to generate combinations according to condition provided.
         NOTE: This function doesn't do actual parsing. 
               All it does is deligate to a function that would parse the data.
               The main logic for parsing only resides in _generate_where_phrase
@@ -214,7 +222,19 @@ class JSON2SQLGenerator(object):
         :param data: (list) list conditions to be combined or parsed
         :return: (unicode) unicode string that could be placed in the SQL
         """
-        raise NotImplementedError
+        sql = ''
+        for element in data:
+            # Get the first key in the dict.
+            inner_condition = next(iter(element))
+            function = self.WHERE_CONDITION_MAPPING.get(inner_condition)
+            # Call the function mapped to it.
+            result = function(element.get(inner_condition))
+            # Append the result to the sql.
+            if not sql and condition in [self.AND_CONDITION, self.OR_CONDITION]:
+                sql += '({})'.format(result)
+            else:
+                sql += ' {0} ({1})'.format(condition, result)
+        return sql
 
     def parse_field_mapping(self, field_mapping):
         """
