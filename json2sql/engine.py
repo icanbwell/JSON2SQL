@@ -153,9 +153,9 @@ class JSON2SQLGenerator(object):
         # Check if data is not blank
         if data:
             # Get the first key in dict.
-            condition = next(iter(data))
+            condition = data.keys()[0]
             # Call the function mapped to the condition
-            function = self.WHERE_CONDITION_MAPPING.get(next(iter(data)))
+            function = self.WHERE_CONDITION_MAPPING.get(condition)
             result = function(data.get(condition))
         return result
 
@@ -222,10 +222,10 @@ class JSON2SQLGenerator(object):
         :param data: (list) list conditions to be combined or parsed
         :return: (unicode) unicode string that could be placed in the SQL
         """
-        sql = ''
+        sql = bytearray()
         for element in data:
             # Get the first key in the dict.
-            inner_condition = next(iter(element))
+            inner_condition = element.keys()[0]
             function = self.WHERE_CONDITION_MAPPING.get(inner_condition)
             # Call the function mapped to it.
             result = function(element.get(inner_condition))
