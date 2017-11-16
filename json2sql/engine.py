@@ -156,7 +156,7 @@ class JSON2SQLGenerator(object):
             condition = data.keys()[0]
             # Call the function mapped to the condition
             function = self.WHERE_CONDITION_MAPPING.get(condition)
-            result = function(data.get(condition))
+            result = function(data[condition])
         return result
 
     def _generate_where_phrase(self, where):
@@ -231,10 +231,10 @@ class JSON2SQLGenerator(object):
             result = function(element.get(inner_condition))
             # Append the result to the sql.
             if not sql and condition in [self.AND_CONDITION, self.OR_CONDITION]:
-                sql += '({})'.format(result)
+                sql.extend('({})'.format(result))
             else:
-                sql += ' {0} ({1})'.format(condition, result)
-        return sql
+                sql.extend(' {0} ({1})'.format(condition, result))
+        return u'({})'.format(sql.decode('utf8'))
 
     def parse_field_mapping(self, field_mapping):
         """
