@@ -1,5 +1,7 @@
-import MySQLdb
+import datetime
 import logging
+import MySQLdb
+
 from collections import namedtuple
 
 logger = logging.getLogger(u'JSON2SQLGenerator')
@@ -159,7 +161,7 @@ class JSON2SQLGenerator(object):
         """
         query = ''
         for field in fields:
-            query += self._join_member_table(self.field_mapping[field][self.table_name])
+            query += self._join_member_table(self.field_mapping[field][self.TABLE_NAME])
         return query
 
     def _create_where(self, data):
@@ -212,9 +214,9 @@ class JSON2SQLGenerator(object):
         # Get all the data elements required and validate them
         data_type, operator, value, field, secondary_value = self._get_validated_data(where)
         # Get db field name
-        field_name = self.field_mapping[field]['field_name']
+        field_name = self.field_mapping[field][self.FIELD_NAME]
         # Get corresponding SQL operator
-        sql_operator = self._get_sql_operator(operator)
+        sql_operator = getattr(self.VALUE_OPERATORS, operator)
         # Get data type and table name from field_mapping
         data_type = self._get_data_type(field)
         table = self._get_table_name(field)
@@ -244,21 +246,13 @@ class JSON2SQLGenerator(object):
             )
         return where_phrase
 
-    def _get_sql_operator(self, operator):
-        """
-        Gets operator to be used in SQL from the string value assigned to it in VALUE_OPERATORS.
-        :param operator: (string|unicode) Operator string that maps to a SQL operator
-        :return: (string) SQL operator mapping to operator string.
-        """
-        return getattr(self.VALUE_OPERATORS, operator)
-
     def _get_data_type(self, field):
         """
         Gets data type for the field from self.field_mapping configured in __init__
         :param field: (int|string) field identifier that is used as key in self.field_mapping
         :return: (string) data type of the field
         """
-        return self.field_mapping[field]['data_type']
+        return self.field_mapping[field][self.DATA_TYPE]
 
     def _get_table_name(self, field):
         """
@@ -266,7 +260,7 @@ class JSON2SQLGenerator(object):
         :param field: (int|string) Field identifier that is used as key in self.field_mapping
         :return: (string|unicode) Name of the table of the field        
         """
-        return self.field_mapping[field]['table_name']
+        return self.field_mapping[field][self.TABLE_NAME]
 
     def _convert_values(self, values, data_type):
         """
