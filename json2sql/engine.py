@@ -172,7 +172,15 @@ class JSON2SQLGenerator(object):
         :param data: (dict) Conditions data which needs to be parsed to generate SQL
         :return: (unicode) Unicode representation of data into SQL
         """
-        raise NotImplementedError
+        result = ''
+        # Check if data is not blank
+        if data:
+            # Get the first key in dict.
+            condition = data.keys()[0]
+            # Call the function mapped to the condition
+            function = self.WHERE_CONDITION_MAPPING.get(condition)
+            result = function(data[condition])
+        return result
 
     def _get_validated_data(self, where):
         try:
@@ -237,12 +245,12 @@ class JSON2SQLGenerator(object):
         # Generate SQL phrase
         if sql_operator == self.BETWEEN:
             where_phrase = u'`{table}`.`{field}` {operator} {primary_value} AND {secondary_value}'.format(
-                table=table, field=field_name, operator=sql_operator, 
+                table=table, field=field_name, operator=sql_operator,
                 value=sql_value, secondary_value=secondary_sql_value
             )
         else:
             where_phrase = u'`{table}`.`{field}` {operator} {value}'.format(
-                operator=sql_operator, table=table, field=field_name, value=sql_value, 
+                operator=sql_operator, table=table, field=field_name, value=sql_value,
             )
         return where_phrase
 
@@ -258,7 +266,7 @@ class JSON2SQLGenerator(object):
         """
         Gets table name for the field from self.field_mapping configured in __init__
         :param field: (int|string) Field identifier that is used as key in self.field_mapping
-        :return: (string|unicode) Name of the table of the field        
+        :return: (string|unicode) Name of the table of the field
         """
         return self.field_mapping[field][self.TABLE_NAME]
 
@@ -291,7 +299,7 @@ class JSON2SQLGenerator(object):
             try:
                 datetime.datetime.strptime(value, '%Y-%m-%d')
             except ValueError as e:
-                raise e            
+                raise e
         elif data_type == self.DATE_TIME:
             try:
                 datetime.datetime.strptime(value, '%Y-%m-%dT%H:%M:%S')
@@ -305,7 +313,7 @@ class JSON2SQLGenerator(object):
         :return: (unicode) unicode containing SQL condition represeted by data ANDed. 
                  This SQL can be directly placed in a SQL query
         """
-        raise NotImplementedError
+        return self._parse_conditions(self.AND_CONDITION, data)
 
     def _parse_or(self, data):
         """
@@ -314,7 +322,7 @@ class JSON2SQLGenerator(object):
         :return: (unicode) unicode containing SQL condition represeted by data ORed. 
                  This SQL can be directly placed in a SQL query
         """
-        raise NotImplementedError
+        return self._parse_conditions(self.OR_CONDITION, data)
 
     def _parse_exists(self, data):
         """
@@ -324,7 +332,7 @@ class JSON2SQLGenerator(object):
         :return: (unicode) unicode containing SQL condition represeted by data with EXISTS check. 
                  This SQL can be directly placed in a SQL query
         """
-        raise NotImplementedError
+        return self._parse_conditions(self.EXISTS_CONDITION, data)
    
     def _parse_not(self, data):
         """
@@ -334,12 +342,12 @@ class JSON2SQLGenerator(object):
         :return: (unicode) unicode containing SQL condition represeted by data with NOT check. 
                  This SQL can be directly placed in a SQL query
         """
-        raise NotImplementedError
+        return self._parse_conditions(self.NOT_CONDITION, data)
    
     def _parse_conditions(self, condition, data):
         """
         To parse AND, NOT, OR, EXISTS data and
-        deligate to proper functions to generate combinations according to condition provided.
+        delegate to proper functions to generate combinations according to condition provided.
         NOTE: This function doesn't do actual parsing. 
               All it does is deligate to a function that would parse the data.
               The main logic for parsing only resides in _generate_where_phrase
@@ -348,7 +356,19 @@ class JSON2SQLGenerator(object):
         :param data: (list) list conditions to be combined or parsed
         :return: (unicode) unicode string that could be placed in the SQL
         """
-        raise NotImplementedError
+        sql = bytearray()
+        for element in data:
+            # Get the first key in the dict.
+            inner_condition = element.keys()[0]
+            function = self.WHERE_CONDITION_MAPPING.get(inner_condition)
+            # Call the function mapped to it.
+            result = function(element.get(inner_condition))
+            # Append the result to the sql.
+            if not sql and condition in [self.AND_CONDITION, self.OR_CONDITION]:
+                sql.extend('({})'.format(result))
+            else:
+                sql.extend(' {0} ({1})'.format(condition, result))
+        return u'({})'.format(sql.decode('utf8'))
 
     def _parse_field_mapping(self, field_mapping):
         """
@@ -358,11 +378,11 @@ class JSON2SQLGenerator(object):
         """
         return {
             field[0]: {
-               self.FIELD_NAME: field[1], 
+               self.FIELD_NAME: field[1],
                self.TABLE_NAME: field[2],
                self.DATA_TYPE: field[3]
             } for field in field_mapping
-        }        
+        }
 
     def _parse_paths_mapping(self, paths):
         """
