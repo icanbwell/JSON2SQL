@@ -114,7 +114,11 @@ class JSON2SQLGenerator(object):
         self.base_table = base_table
         join_phrase = self._create_join(data['fields'])
         where_phrase = self._create_where(data['where_data'])
-
+        
+        # Clear join data
+        # TODO: Need to use this variable to actaully store the join data and reuse on future occurances
+        self.joined_table_names = set()
+        
         return u'SELECT COUNT(*) FROM {base_table} {join_phrase} WHERE {where_phrase}'.format(
             join_phrase=join_phrase,
             base_table=base_table,
@@ -187,7 +191,7 @@ class JSON2SQLGenerator(object):
             data_type = where['data_type'].lower()
             operator = where['operator'].lower()
             value = where['value']
-            field = where['field'].lower()
+            field = where['field']
         except KeyError as e:
             raise KeyError(
                 u'Missing key - [{}] in where condition dict'.format(e.args[0])
@@ -332,7 +336,7 @@ class JSON2SQLGenerator(object):
         :return: (unicode) unicode containing SQL condition represeted by data with EXISTS check. 
                  This SQL can be directly placed in a SQL query
         """
-        return self._parse_conditions(self.EXISTS_CONDITION, data)
+        raise NotImplementedError
    
     def _parse_not(self, data):
         """
