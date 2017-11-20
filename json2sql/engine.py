@@ -118,7 +118,6 @@ class JSON2SQLGenerator(object):
         # Clear join data
         # TODO: Need to use this variable to actaully store the join data and reuse on future occurances
         self.joined_table_names = set()
-        
         return u'SELECT COUNT(*) FROM {base_table} {join_phrase} WHERE {where_phrase}'.format(
             join_phrase=join_phrase,
             base_table=base_table,
@@ -163,12 +162,12 @@ class JSON2SQLGenerator(object):
         :param fields: (list) Fields for which joins need to be created
         :return: (unicode) unicode string that can be appended to SQL just after FROM <table_name>
         """
-        query = ''
+        query = bytearray()
         for field in fields:
             table_name = self.field_mapping[field][self.TABLE_NAME]
             if table_name != self.base_table:
-                query += self._join_member_table(self.field_mapping[field][self.TABLE_NAME])
-        return query
+                query.extend(self._join_member_table(self.field_mapping[field][self.TABLE_NAME]))
+        return query.decode('utf-8')
 
     def _create_where(self, data):
         """
