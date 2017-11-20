@@ -96,11 +96,11 @@ class JSON2SQLGenerator(object):
 
         # Mapping to be used to parse various combination keywords data
         self.WHERE_CONDITION_MAPPING = {
-            self.WHERE_CONDITION: self._generate_where_phrase,
-            self.AND_CONDITION: self._parse_and,
-            self.OR_CONDITION: self._parse_or,
-            self.NOT_CONDITION: self._parse_not,
-            self.EXISTS_CONDITION: self._parse_exists,
+            self.WHERE_CONDITION: '_generate_where_phrase',
+            self.AND_CONDITION: '_parse_and',
+            self.OR_CONDITION: '_parse_or',
+            self.NOT_CONDITION: '_parse_not',
+            self.EXISTS_CONDITION: '_parse_exists',
         }
 
     def generate_sql(self, data, base_table):
@@ -165,7 +165,9 @@ class JSON2SQLGenerator(object):
         """
         query = ''
         for field in fields:
-            query += self._join_member_table(self.field_mapping[field][self.TABLE_NAME])
+            table_name = self.field_mapping[field][self.TABLE_NAME]
+            if table_name != self.base_table:
+                query += self._join_member_table(self.field_mapping[field][self.TABLE_NAME])
         return query
 
     def _create_where(self, data):
@@ -182,7 +184,7 @@ class JSON2SQLGenerator(object):
             # Get the first key in dict.
             condition = data.keys()[0]
             # Call the function mapped to the condition
-            function = self.WHERE_CONDITION_MAPPING.get(condition)
+            function = getattr(self, self.WHERE_CONDITION_MAPPING.get(condition))
             result = function(data[condition])
         return result
 
@@ -364,7 +366,7 @@ class JSON2SQLGenerator(object):
         for element in data:
             # Get the first key in the dict.
             inner_condition = element.keys()[0]
-            function = self.WHERE_CONDITION_MAPPING.get(inner_condition)
+            function = getattr(self, self.WHERE_CONDITION_MAPPING.get(inner_condition))
             # Call the function mapped to it.
             result = function(element.get(inner_condition))
             # Append the result to the sql.
