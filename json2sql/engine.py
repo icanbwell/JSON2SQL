@@ -96,11 +96,11 @@ class JSON2SQLGenerator(object):
 
         # Mapping to be used to parse various combination keywords data
         self.WHERE_CONDITION_MAPPING = {
-            self.WHERE_CONDITION: self._generate_where_phrase,
-            self.AND_CONDITION: self._parse_and,
-            self.OR_CONDITION: self._parse_or,
-            self.NOT_CONDITION: self._parse_not,
-            self.EXISTS_CONDITION: self._parse_exists,
+            self.WHERE_CONDITION: '_generate_where_phrase',
+            self.AND_CONDITION: '_parse_and',
+            self.OR_CONDITION: '_parse_or',
+            self.NOT_CONDITION: '_parse_not',
+            self.EXISTS_CONDITION: '_parse_exists',
         }
 
     def generate_sql(self, data, base_table):
@@ -118,7 +118,6 @@ class JSON2SQLGenerator(object):
         # Clear join data
         # TODO: Need to use this variable to actaully store the join data and reuse on future occurances
         self.joined_table_names = set()
-        
         return u'SELECT COUNT(*) FROM {base_table} {join_phrase} WHERE {where_phrase}'.format(
             join_phrase=join_phrase,
             base_table=base_table,
@@ -163,10 +162,12 @@ class JSON2SQLGenerator(object):
         :param fields: (list) Fields for which joins need to be created
         :return: (unicode) unicode string that can be appended to SQL just after FROM <table_name>
         """
-        query = ''
+        query = bytearray()
         for field in fields:
-            query += self._join_member_table(self.field_mapping[field][self.TABLE_NAME])
-        return query
+            table_name = self.field_mapping[field][self.TABLE_NAME]
+            if table_name != self.base_table:
+                query.extend(self._join_member_table(self.field_mapping[field][self.TABLE_NAME]))
+        return query.decode('utf-8')
 
     def _create_where(self, data):
         """
@@ -182,13 +183,12 @@ class JSON2SQLGenerator(object):
             # Get the first key in dict.
             condition = data.keys()[0]
             # Call the function mapped to the condition
-            function = self.WHERE_CONDITION_MAPPING.get(condition)
+            function = getattr(self, self.WHERE_CONDITION_MAPPING.get(condition))
             result = function(data[condition])
         return result
 
     def _get_validated_data(self, where):
         try:
-            data_type = where['data_type'].lower()
             operator = where['operator'].lower()
             value = where['value']
             field = where['field']
@@ -206,7 +206,7 @@ class JSON2SQLGenerator(object):
                         operator
                     )
                 )
-            return data_type, operator, value, field, secondary_value
+            return operator, value, field, secondary_value
 
     def _generate_where_phrase(self, where):
         """
@@ -224,7 +224,7 @@ class JSON2SQLGenerator(object):
                 )
             )
         # Get all the data elements required and validate them
-        data_type, operator, value, field, secondary_value = self._get_validated_data(where)
+        operator, value, field, secondary_value = self._get_validated_data(where)
         # Get db field name
         field_name = self.field_mapping[field][self.FIELD_NAME]
         # Get corresponding SQL operator
@@ -364,7 +364,7 @@ class JSON2SQLGenerator(object):
         for element in data:
             # Get the first key in the dict.
             inner_condition = element.keys()[0]
-            function = self.WHERE_CONDITION_MAPPING.get(inner_condition)
+            function = getattr(self, self.WHERE_CONDITION_MAPPING.get(inner_condition))
             # Call the function mapped to it.
             result = function(element.get(inner_condition))
             # Append the result to the sql.
