@@ -189,7 +189,6 @@ class JSON2SQLGenerator(object):
 
     def _get_validated_data(self, where):
         try:
-            data_type = where['data_type'].lower()
             operator = where['operator'].lower()
             value = where['value']
             field = where['field']
@@ -207,7 +206,7 @@ class JSON2SQLGenerator(object):
                         operator
                     )
                 )
-            return data_type, operator, value, field, secondary_value
+            return operator, value, field, secondary_value
 
     def _generate_where_phrase(self, where):
         """
@@ -225,7 +224,7 @@ class JSON2SQLGenerator(object):
                 )
             )
         # Get all the data elements required and validate them
-        data_type, operator, value, field, secondary_value = self._get_validated_data(where)
+        operator, value, field, secondary_value = self._get_validated_data(where)
         # Get db field name
         field_name = self.field_mapping[field][self.FIELD_NAME]
         # Get corresponding SQL operator
