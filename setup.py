@@ -26,10 +26,10 @@ setup(
     long_description=long_description,
 
     # The project's main homepage.
-    url='https://github.com/icanbwell/bwell_JSON2SQL',
+    url='https://github.com/icanbwell/JSON2SQL',
 
     # Author details
-    author='B.Well',
+    author='b.well',
     author_email='support@icanbwell.com',
 
     #https://help.github.com/articles/licensing-a-repository/
