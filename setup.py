@@ -20,7 +20,7 @@ setup(
     name='json2sql',
 
     # Versions should comply with PEP440.
-    version='0.0.1',
+    version='0.0.2',
 
     description='Convert json data to a sql query.',
     long_description=long_description,
