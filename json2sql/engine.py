@@ -138,7 +138,7 @@ class JSON2SQLGenerator(object):
             if '{join_table}.{join_column}'.format(join_table=table, join_column=join_column) not in self.joined_table_names:
                 if parent_table != self.base_table:
                     query = self._join_member_table(parent_table)
-                query = u'{query} inner join {join_table} on {join_table}.{join_column} = {parent_table}.{parent_column}'.format(
+                query = u'{query} left join {join_table} on {join_table}.{join_column} = {parent_table}.{parent_column}'.format(
                     parent_table=parent_table,
                     parent_column=table_data[self.PARENT_COLUMN],
                     join_column=join_column,
