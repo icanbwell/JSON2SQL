@@ -12,9 +12,6 @@ class JSON2SQLGenerator(object):
     To Generate SQL query from JSON data
     """
 
-    # Names of the joined tables currently in query in the format ('{table_name}.{field_name}')
-    joined_table_names = set()
-
     # Constants to map JSON keys
     WHERE_CONDITION = 'where'
     AND_CONDITION = 'and'
@@ -102,6 +99,9 @@ class JSON2SQLGenerator(object):
             self.NOT_CONDITION: '_parse_not',
             self.EXISTS_CONDITION: '_parse_exists',
         }
+
+        # Names of the joined tables currently in query in the format ('{table_name}.{field_name}')
+        self.joined_table_names = set()
 
     def generate_sql(self, data, base_table):
         """
