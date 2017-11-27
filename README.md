@@ -132,8 +132,9 @@ The knowledge base required for the plugin are two mappings:
     ``` 
     This function will return the SQL query.
 
+## License
 
-Copyright 2018 b.well Connected Health, Inc.
+Copyright 2018, [b.well Connected Health, Inc](https://www.icanbwell.com/).
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
