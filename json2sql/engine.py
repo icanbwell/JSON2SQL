@@ -162,12 +162,13 @@ class JSON2SQLGenerator(object):
         :param fields: (list) Fields for which joins need to be created
         :return: (unicode) unicode string that can be appended to SQL just after FROM <table_name>
         """
+        # TODO use bytearray instead of string
         query = ''
         for field in fields:
             table_name = self.field_mapping[field][self.TABLE_NAME]
             if table_name != self.base_table:
                 query = u'{0} {1}'.format(query, self._join_member_table(self.field_mapping[field][self.TABLE_NAME]))
-        return query.decode('utf-8')
+        return query
 
     def _create_where(self, data):
         """
@@ -276,11 +277,22 @@ class JSON2SQLGenerator(object):
 
     def _convert_values(self, values, data_type):
         """
-        Converts values for SQL query. Adds '' string, date, datetime values
+        Converts values for SQL query. Adds '' string, date, datetime values, string choice value
         :param values: (iterable) Any instance of iterable values of same data type that need conversion
         :param data_type: (string) Data type of the values provided
         """
-        wrapper = '\'{value}\'' if data_type in self.CONVERSION_REQUIRED else '{value}'
+        if data_type in [self.CHOICE, self.MULTICHOICE]:
+            # try converting the value to int
+            try: 
+                int(values[0])
+            except ValueError:
+                wrapper = '\'{value}\''
+            else:
+                wrapper = '{value}'
+        elif data_type in self.CONVERSION_REQUIRED:
+            wrapper = '\'{value}\''
+        else:
+            wrapper = '{value}'
         return (wrapper.format(value=value) for value in values)
 
     def _sanitize_value(self, value, data_type):
