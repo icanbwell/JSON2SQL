@@ -276,11 +276,22 @@ class JSON2SQLGenerator(object):
 
     def _convert_values(self, values, data_type):
         """
-        Converts values for SQL query. Adds '' string, date, datetime values
+        Converts values for SQL query. Adds '' string, date, datetime values, string choice value
         :param values: (iterable) Any instance of iterable values of same data type that need conversion
         :param data_type: (string) Data type of the values provided
         """
-        wrapper = '\'{value}\'' if data_type in self.CONVERSION_REQUIRED else '{value}'
+        if data_type in [self.CHOICE, self.MULTICHOICE]:
+            # try converting the value to int
+            try: 
+                int(values[0])
+            except ValueError:
+                wrapper = '\'{value}\''
+            else:
+                wrapper = '{value}'
+        elif data_type in self.CONVERSION_REQUIRED:
+            wrapper = '\'{value}\''
+        else:
+            wrapper = '{value}'
         return (wrapper.format(value=value) for value in values)
 
     def _sanitize_value(self, value, data_type):
