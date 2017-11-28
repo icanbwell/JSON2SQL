@@ -162,12 +162,13 @@ class JSON2SQLGenerator(object):
         :param fields: (list) Fields for which joins need to be created
         :return: (unicode) unicode string that can be appended to SQL just after FROM <table_name>
         """
+        # TODO use bytearray instead of string
         query = ''
         for field in fields:
             table_name = self.field_mapping[field][self.TABLE_NAME]
             if table_name != self.base_table:
                 query = u'{0} {1}'.format(query, self._join_member_table(self.field_mapping[field][self.TABLE_NAME]))
-        return query.decode('utf-8')
+        return query
 
     def _create_where(self, data):
         """
