@@ -83,13 +83,14 @@ class JSON2SQLGenerator(object):
         """
         Initialise basic params.
         :param field_mapping: (tuple) tuple of tuples containing (field_identifier, field_name, table_name).
-        :param paths: (tuple) tuple of tuples containig (join_table, join_field, parent_table, parent_field).
+        :param paths: (tuple) tuple of tuples containing (join_table, join_field, parent_table, parent_field).
                       Information about paths from a model to reach to a specific model and when to stop.
         :return: None
         """
 
+        self.base_table = ''
         self.field_mapping = self._parse_field_mapping(field_mapping)
-        self.paths = self._parse_paths_mapping(paths)
+        self.path_mapping = self._parse_multi_path_mapping(paths)
 
         # Mapping to be used to parse various combination keywords data
         self.WHERE_CONDITION_MAPPING = {
@@ -112,11 +113,16 @@ class JSON2SQLGenerator(object):
         :return: (unicode) Finalized SQL query unicode
         """
         self.base_table = base_table
-        join_phrase = self._create_join(data['fields'])
         where_phrase = self._create_where(data['where_data'])
-        
+        path_subset = self.extract_paths_subset(list(
+            map(lambda field_id: self.field_mapping[field_id][self.TABLE_NAME], data['fields'])),
+            data['path_hints'] or {}
+        )
+        join_tables = self.create_join_path(path_subset, self.base_table)
+        join_phrase = self.generate_left_join(join_tables)
+
         # Clear join data
-        # TODO: Need to use this variable to actaully store the join data and reuse on future occurances
+        # TODO: Need to use this variable to actually store the join data and reuse on future occurances
         self.joined_table_names = set()
         return u'SELECT COUNT(*) FROM {base_table} {join_phrase} WHERE {where_phrase}'.format(
             join_phrase=join_phrase,
@@ -124,51 +130,118 @@ class JSON2SQLGenerator(object):
             where_phrase=where_phrase
         )
 
-    def _join_member_table(self, table):
+    def _parse_multi_path_mapping(self, paths):
         """
-        Function to find member table path from child table
-        :param table: child table name
-        :return: path from child table to member table.
-        """
-        table_data = self.paths.get(table)
-        query = ''
-        if table_data:
-            parent_table = table_data[self.PARENT_TABLE]
-            join_column = table_data[self.JOIN_COLUMN]
-            if '{join_table}.{join_column}'.format(join_table=table, join_column=join_column) not in self.joined_table_names:
-                if parent_table != self.base_table:
-                    query = self._join_member_table(parent_table)
-                query = u'{query} left join {join_table} on {join_table}.{join_column} = {parent_table}.{parent_column}'.format(
-                    parent_table=parent_table,
-                    parent_column=table_data[self.PARENT_COLUMN],
-                    join_column=join_column,
-                    query=query,
-                    join_table=table
-                )
-                self.joined_table_names.add('{join_table}.{join_column}'.format(
-                    join_table=table,
-                    join_column=table_data[self.JOIN_COLUMN]
-                ))
-        else:
-            logger.error(
-                'Table Data not found in paths for table name [{}]'.format(table)
-            )
-        return query
+        Create mapping of what nodes can be reached from any given node.
+        This method also support the case when you can jump to multiple node from any given node
 
-    def _create_join(self, fields):
+        :param paths: (tuple) tuple of tuples in the format ((join_table, join_field, parent_table, parent_field),)
+        :return: (dict) dict in the format {'join_table': {'parent_table': {'parent_field': , 'join_field':} }}
         """
-        Creates join phrase for SQL using the field, field_mapping and joins. 
-        Updates _join_names to assign names to each field to be used by _create_where
-        :param fields: (list) Fields for which joins need to be created
-        :return: (unicode) unicode string that can be appended to SQL just after FROM <table_name>
+        path_map = {}
+        for join_tbl, join_fld, parent_tbl, parent_fld in paths:
+            if join_tbl not in path_map:
+                path_map[join_tbl] = {}
+
+            # We can support if there are multiple ways to join a table
+            # We don't support if there are multiple fields on join table path
+            assert parent_tbl not in path_map[join_tbl], 'Joins with multiple fields is not supported'
+            path_map[join_tbl][parent_tbl] = {
+                self.PARENT_COLUMN: parent_fld,
+                self.JOIN_COLUMN: join_fld
+            }
+
+        return path_map
+
+    def extract_paths_subset(self, start_nodes, path_hints):
         """
-        # TODO use bytearray instead of string
-        query = ''
-        for field in fields:
-            table_name = self.field_mapping[field][self.TABLE_NAME]
-            if table_name != self.base_table:
-                query = u'{0} {1}'.format(query, self._join_member_table(self.field_mapping[field][self.TABLE_NAME]))
-        return query
+        Extract a subset of paths which only contains paths which are possible from starting nodes
+        When there is multiple options from any node then we look in path hints to select a node.
+
+        This method also aims to merge duplicate path nodes.
+        Example:
+        A -> B -> C
+        A -> B ->  D
+
+        Merge this into
+        A -> B -> C
+             | -> D
+
+        Merge happens from left side not right side.
+        As our current implementation base is always on left side
+
+        Left side is always base_table
+        :param start_nodes: Array of table names
+        :param path_hints:
+        :return:
+        """
+        path_subset = {}
+        # Convert start nodes to set as we would need this for lookups
+        start_nodes = set(start_nodes)
+        traversal_nodes = list(start_nodes)  # type: list
+
+        # We would be doing traversal from given tables towards base tables.
+        while len(traversal_nodes) > 0:
+            curr_node = traversal_nodes.pop()  # type: str
+
+            # This condition indicate that we have reached end of path
+            if curr_node == self.base_table:
+                continue
+
+            next_nodes = self.path_mapping[curr_node]  # type: dict
+
+            if curr_node in path_hints:
+                assert path_hints[curr_node] in next_nodes, 'Node provided in hint is not a valid option.'
+                assert len(
+                    set(self.path_mapping[curr_node]) &
+                    (start_nodes | set(path_hints.values()))
+                ) == 1, 'Multiple paths are selected from node {}'.format(curr_node)
+                parent_node = path_hints[curr_node]
+                traversal_nodes.append(parent_node)
+            elif len(next_nodes) == 1:
+                parent_node = next_nodes.keys()[0]
+                traversal_nodes.append(parent_node)
+            else:
+                raise Exception("No path hint provided for `{}`".format(curr_node))
+
+            if parent_node not in path_subset:
+                path_subset[parent_node] = set()
+
+            path_subset[parent_node].add(curr_node)
+
+        return path_subset
+
+    def create_join_path(self, path_map, curr_table):
+        """
+        Convert the path subset into a join table
+        Return list of tuples
+        [(join table, parent table)]
+        :param path_map:
+        :param curr_table:
+        :return:
+        """
+        # This condition satisfied when we reach the end of the current path
+        if curr_table not in path_map:
+            return
+
+        for table_name in sorted(path_map[curr_table]):
+            yield (table_name, curr_table)
+            for item in (self.create_join_path(path_map, table_name)):
+                yield item
+
+    def generate_left_join(self, join_path):
+        join_phrases = []
+        for join_table, parent_table in join_path:
+            join_phrases.append(
+                'LEFT JOIN {join_tbl} ON {join_tbl}.{join_fld} = {parent_tbl}.{parent_fld}'.format(
+                    join_tbl=join_table,
+                    parent_tbl=parent_table,
+                    join_fld=self.path_mapping[join_table][parent_table][self.JOIN_COLUMN],
+                    parent_fld=self.path_mapping[join_table][parent_table][self.PARENT_COLUMN]
+                )
+            )
+
+        return ' '.join(join_phrases)
 
     def _create_where(self, data):
         """
