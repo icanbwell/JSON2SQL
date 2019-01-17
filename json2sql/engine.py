@@ -233,20 +233,22 @@ class JSON2SQLGenerator(object):
         # Get data type and table name from field_mapping
         data_type = self._get_data_type(field)
         table = self._get_table_name(field)
-        # Check if the primary value and data_type are in sync
-        self._sanitize_value(value, data_type)
-        # Check if the secondary_value and data_type are in sync
-        if secondary_value:
-            self._sanitize_value(secondary_value, data_type)
-        # Make string SQL injection proof
-        if data_type == self.STRING:
-            self._sql_injection_proof(value)
+
+        if operator != self.VALUE_OPERATORS.is_op:
+            # Check if the primary value and data_type are in sync
+            self._sanitize_value(value, data_type)
+            # Check if the secondary_value and data_type are in sync
             if secondary_value:
-                self._sql_injection_proof(secondary_value)
-        # Make value sql proof. For ex: if value is string or data convert it to '<value>'
-        sql_value, secondary_sql_value = self._convert_values(
-            [value, secondary_value], data_type
-        )
+                self._sanitize_value(secondary_value, data_type)
+            # Make string SQL injection proof
+            if data_type == self.STRING:
+                self._sql_injection_proof(value)
+                if secondary_value:
+                    self._sql_injection_proof(secondary_value)
+            # Make value sql proof. For ex: if value is string or data convert it to '<value>'
+            sql_value, secondary_sql_value = self._convert_values(
+                [value, secondary_value], data_type
+            )
         # Generate SQL phrase
         if sql_operator == self.BETWEEN:
             where_phrase = u'`{table}`.`{field}` {operator} {primary_value} AND {secondary_value}'.format(
