@@ -2,7 +2,7 @@ import datetime
 import logging
 import MySQLdb
 
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 
 logger = logging.getLogger(u'JSON2SQLGenerator')
 
@@ -175,7 +175,7 @@ class JSON2SQLGenerator(object):
         :param path_hints:
         :return:
         """
-        path_subset = {}
+        path_subset = defaultdict(set)
         # Convert start nodes to set as we would need this for lookups
         start_nodes = set(start_nodes)
         traversal_nodes = list(start_nodes)  # type: list
@@ -204,9 +204,6 @@ class JSON2SQLGenerator(object):
             else:
                 raise Exception("No path hint provided for `{}`".format(curr_node))
 
-            if parent_node not in path_subset:
-                path_subset[parent_node] = set()
-
             path_subset[parent_node].add(curr_node)
 
         return path_subset
@@ -216,8 +213,8 @@ class JSON2SQLGenerator(object):
         Convert the path subset into a join table
         Return list of tuples
         [(join table, parent table)]
-        :param path_map:
-        :param curr_table:
+        :param path_map: (dict) Nested dict of format { join_table: { parent_table: {join_field, parent_field} } }
+        :param curr_table: (str) Node from which we need to be created.
         :return:
         """
         # This condition satisfied when we reach the end of the current path
@@ -471,20 +468,6 @@ class JSON2SQLGenerator(object):
                self.TABLE_NAME: field[2],
                self.DATA_TYPE: field[3]
             } for field in field_mapping
-        }
-
-    def _parse_paths_mapping(self, paths):
-        """
-        Converts tuple of tuples to dict.
-        :param paths: (tuple) tuple of tuples in the format ((join_table, join_field, parent_table, parent_field),)
-        :return: (dict) dict in the format {'join_table': {'join_field': , 'parent_table': , 'parent_field': }}
-        """
-        return {
-            path[0]: {
-                self.JOIN_COLUMN: path[1],
-                self.PARENT_TABLE: path[2],
-                self.PARENT_COLUMN: path[3]
-            } for path in paths
         }
 
     def _sql_injection_proof(self, value):
