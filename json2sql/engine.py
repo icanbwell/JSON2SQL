@@ -101,9 +101,6 @@ class JSON2SQLGenerator(object):
             self.EXISTS_CONDITION: '_parse_exists',
         }
 
-        # Names of the joined tables currently in query in the format ('{table_name}.{field_name}')
-        self.joined_table_names = set()
-
     def generate_sql(self, data, base_table):
         """
         Create SQL query from provided json
@@ -121,9 +118,6 @@ class JSON2SQLGenerator(object):
         join_tables = self.create_join_path(path_subset, self.base_table)
         join_phrase = self.generate_left_join(join_tables)
 
-        # Clear join data
-        # TODO: Need to use this variable to actually store the join data and reuse on future occurances
-        self.joined_table_names = set()
         return u'SELECT COUNT(*) FROM {base_table} {join_phrase} WHERE {where_phrase}'.format(
             join_phrase=join_phrase,
             base_table=base_table,
@@ -138,11 +132,8 @@ class JSON2SQLGenerator(object):
         :param paths: (tuple) tuple of tuples in the format ((join_table, join_field, parent_table, parent_field),)
         :return: (dict) dict in the format {'join_table': {'parent_table': {'parent_field': , 'join_field':} }}
         """
-        path_map = {}
+        path_map = defaultdict(dict)
         for join_tbl, join_fld, parent_tbl, parent_fld in paths:
-            if join_tbl not in path_map:
-                path_map[join_tbl] = {}
-
             # We can support if there are multiple ways to join a table
             # We don't support if there are multiple fields on join table path
             assert parent_tbl not in path_map[join_tbl], 'Joins with multiple fields is not supported'
