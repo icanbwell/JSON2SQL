@@ -113,7 +113,7 @@ class JSON2SQLGenerator(object):
         where_phrase = self._create_where(data['where_data'])
         path_subset = self.extract_paths_subset(list(
             map(lambda field_id: self.field_mapping[field_id][self.TABLE_NAME], data['fields'])),
-            data['path_hints'] or {}
+            data.get('path_hints', {})
         )
         join_tables = self.create_join_path(path_subset, self.base_table)
         join_phrase = self.generate_left_join(join_tables)
