@@ -113,6 +113,7 @@ class JSON2SQLGenerator(object):
         :return: (unicode) Finalized SQL query unicode
         """
         self.base_table = base_table
+        assert self.validate_where_data(data.get('where_data', {})), 'Invalid where data'
         where_phrase = self._generate_sql_condition(data['where_data'])
         path_subset = self.extract_paths_subset(list(
             map(lambda field_id: self.field_mapping[field_id][self.TABLE_NAME], data['fields'])),
@@ -239,11 +240,11 @@ class JSON2SQLGenerator(object):
 
     def generate_group_by(self, group_by_fields, having_clause):
         """
-        Return group by and having clause
+        Validate and return group by and having clause statement
 
-        :param group_by_fields:
-        :param having_clause:
-        :return:
+        :rtype: str
+        :type having_clause: Dict
+        :type group_by_fields: List[int]
         """
         assert isinstance(group_by_fields, list)
         assert isinstance(having_clause, dict)
@@ -273,22 +274,28 @@ class JSON2SQLGenerator(object):
         Validate the group by data to check if it can produce a query which is valid.
         For example it would check only group by fields or aggregate functions are being used.
 
-        :param group_by_fields:
-        :param having:
+        :type having_clause: Dict
+        :type group_by_fields: List[int]
         """
-        def extract_key_from_nested_dict(d, key):
-            assert isinstance(d, dict)
-            assert isinstance(key, str) and len(key) > 0
+        assert isinstance(group_by_fields, list)
+        assert isinstance(having, dict)
 
-            for k, v in d.items():
-                if k == key:
-                    yield v
-                elif isinstance(v, dict):
-                    for item in extract_key_from_nested_dict(v):
-                        yield item
-
-        for cond in extract_key_from_nested_dict(having, self.WHERE_CONDITION):
+        for cond in self.extract_key_from_nested_dict(having, self.WHERE_CONDITION):
             assert 'aggregate_lhs' in cond or cond['field'] in group_by_fields, \
+                'Use of non aggregate value or non grouped field: {}'.format(cond)
+
+        return True
+
+    def validate_where_data(self, where_data):
+        """
+        Validate if where fields doesn't contains use of aggregation function
+
+        :type where_data: Dict
+        """
+        assert isinstance(where_data, dict)
+
+        for cond in self.extract_key_from_nested_dict(where_data, self.WHERE_CONDITION):
+            assert 'aggregate_lhs' not in cond, \
                 'Use of non aggregate value or non grouped field: {}'.format(cond)
 
         return True
@@ -543,3 +550,20 @@ class JSON2SQLGenerator(object):
         :return: (string|unicode) escaped string
         """
         return MySQLdb.escape_string(value)
+
+    def extract_key_from_nested_dict(self, d, key):
+        """
+        Traverse the dictionary recursively and return the value with specified key
+
+        :type d: Dict
+        :type key: str
+        """
+        assert isinstance(d, dict)
+        assert isinstance(key, str) and len(key) > 0
+
+        for k, v in d.items():
+            if k == key:
+                yield v
+            elif isinstance(v, dict):
+                for item in self.extract_key_from_nested_dict(v):
+                    yield item
