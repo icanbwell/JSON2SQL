@@ -37,6 +37,9 @@ class JSON2SQLGenerator(object):
     BETWEEN = 'between'
     BINARY_OPERATORS = (BETWEEN, )
 
+    # MySQL aggregate functions
+    ALLOWED_AGGREGATE_FUNCTIONS = {'MIN', 'MAX'}
+
     # Supported operators
     VALUE_OPERATORS = namedtuple('VALUE_OPRATORS', [
         'equals', 'greater_than', 'less_than',
@@ -110,18 +113,22 @@ class JSON2SQLGenerator(object):
         :return: (unicode) Finalized SQL query unicode
         """
         self.base_table = base_table
-        where_phrase = self._create_where(data['where_data'])
+        assert self.validate_where_data(data.get('where_data', {})), 'Invalid where data'
+        where_phrase = self._generate_sql_condition(data['where_data'])
         path_subset = self.extract_paths_subset(list(
             map(lambda field_id: self.field_mapping[field_id][self.TABLE_NAME], data['fields'])),
             data.get('path_hints', {})
         )
         join_tables = self.create_join_path(path_subset, self.base_table)
         join_phrase = self.generate_left_join(join_tables)
+        group_by_phrase = self.generate_group_by(data.get('group_by_fields', []),
+                                                 data.get('having', {}))
 
-        return u'SELECT COUNT(*) FROM {base_table} {join_phrase} WHERE {where_phrase}'.format(
+        return u'SELECT COUNT(*) FROM {base_table} {join_phrase} WHERE {where_phrase} {group_by_fragment}'.format(
             join_phrase=join_phrase,
             base_table=base_table,
-            where_phrase=where_phrase
+            where_phrase=where_phrase,
+            group_by_fragment=group_by_phrase
         )
 
     def _parse_multi_path_mapping(self, paths):
@@ -231,7 +238,71 @@ class JSON2SQLGenerator(object):
 
         return ' '.join(join_phrases)
 
-    def _create_where(self, data):
+    def generate_group_by(self, group_by_fields, having_clause):
+        """
+        Validate and return group by and having clause statement
+
+        :rtype: str
+        :type having_clause: Dict
+        :type group_by_fields: List[int]
+        """
+        assert isinstance(group_by_fields, list)
+        assert isinstance(having_clause, dict)
+
+        assert self.validate_group_by_data(group_by_fields, having_clause), 'Invalid having data'
+
+        if len(group_by_fields) == 0:
+            return ''
+
+        result = ''
+        fully_qualified_field_names = map(
+            lambda field_id: '`{table_name}`.`{field_name}`'.format(
+                table_name=self.field_mapping[field_id][self.TABLE_NAME],
+                field_name=self.field_mapping[field_id][self.FIELD_NAME]
+            ),
+            group_by_fields
+        )
+
+        result += 'GROUP BY {fields}'.format(fields=', '.join(fully_qualified_field_names))
+        if len(having_clause.keys()) > 0:
+            result += 'HAVING {condition}'.format(condition=self._generate_sql_condition(having_clause))
+
+        return result
+
+    def validate_group_by_data(self, group_by_fields, having):
+        """
+        Validate the group by data to check if it can produce a query which is valid.
+        For example it would check only group by fields or aggregate functions are being used.
+
+        :type having: Dict
+        :type group_by_fields: List[int]
+        """
+        assert isinstance(group_by_fields, list)
+        assert isinstance(having, dict)
+
+        for cond in self.extract_key_from_nested_dict(having, self.WHERE_CONDITION):
+            assert isinstance(cond, dict), 'where condition needs to be dict'
+            assert 'aggregate_lhs' in cond or cond.get('field') in group_by_fields, \
+                'Use of non aggregate value or non grouped field: {}'.format(cond)
+
+        return True
+
+    def validate_where_data(self, where_data):
+        """
+        Validate if where fields doesn't contains use of aggregation function
+        :type where_data: Dict
+        """
+        assert isinstance(where_data, dict) and len(where_data) > 0, \
+            'Invalid or empty where data'
+
+        for cond in self.extract_key_from_nested_dict(where_data, self.WHERE_CONDITION):
+            assert isinstance(cond, dict), 'Invalid where condition'
+            assert 'aggregate_lhs' not in cond, \
+                'Use of non aggregate value or non grouped field: {}'.format(cond)
+
+        return True
+
+    def _generate_sql_condition(self, data):
         """
         This function uses recursion to generate sql for nested conditions.
         Every key in the dict will map to a function by referencing WHERE_CONDITION_MAPPING.
@@ -274,7 +345,7 @@ class JSON2SQLGenerator(object):
         """
         Function to generate a single condition(column1 = 1, or column1 BETWEEN 1 and 5) based on data provided.
         Uses _join_names to assign table_name to a field in query.
-        :param where: (dict) will contain required data to generate condition. 
+        :param where: (dict) will contain required data to generate condition.
                       Sample Format: {"field": , "primary_value": ,"operator": , "secondary_value"(optional): }
         :return: (unicode) SQL condition in unicode represented by where data
         """
@@ -310,15 +381,26 @@ class JSON2SQLGenerator(object):
             sql_value, secondary_sql_value = self._convert_values(
                 [value, secondary_value], data_type
             )
+
+        lhs = u'`{table}`.`{field}`'.format(table=table, field=field)  # type: unicode
+
+        # Apply aggregate function to L.H.S
+        if 'aggregate_lhs' in where:
+            aggregate_func_name = where['aggregate_lhs'].upper()  # type: unicode
+            if aggregate_func_name in self.ALLOWED_AGGREGATE_FUNCTIONS:
+                lhs = u'{func_name}({field_name})'.format(func_name=aggregate_func_name, field_name=lhs)
+            else:
+                logger.info("Unsupported aggregate functions: {}".format(aggregate_func_name))
+
         # Generate SQL phrase
         if sql_operator == self.BETWEEN:
-            where_phrase = u'`{table}`.`{field}` {operator} {primary_value} AND {secondary_value}'.format(
-                table=table, field=field_name, operator=sql_operator,
+            where_phrase = u'{lhs} {operator} {primary_value} AND {secondary_value}'.format(
+                lhs=lhs, operator=sql_operator,
                 value=sql_value, secondary_value=secondary_sql_value
             )
         else:
-            where_phrase = u'`{table}`.`{field}` {operator} {value}'.format(
-                operator=sql_operator, table=table, field=field_name, value=sql_value,
+            where_phrase = u'{lhs} {operator} {value}'.format(
+                operator=sql_operator, lhs=lhs, value=sql_value,
             )
         return where_phrase
 
@@ -346,7 +428,7 @@ class JSON2SQLGenerator(object):
         """
         if data_type in [self.CHOICE, self.MULTICHOICE]:
             # try converting the value to int
-            try: 
+            try:
                 int(values[0])
             except ValueError:
                 wrapper = '\'{value}\''
@@ -412,7 +494,7 @@ class JSON2SQLGenerator(object):
                  This SQL can be directly placed in a SQL query
         """
         raise NotImplementedError
-   
+
     def _parse_not(self, data):
         """
         To parse the NOT check/wrapper for where clause.
@@ -422,7 +504,7 @@ class JSON2SQLGenerator(object):
                  This SQL can be directly placed in a SQL query
         """
         return self._parse_conditions(self.NOT_CONDITION, data)
-   
+
     def _parse_conditions(self, condition, data):
         """
         To parse AND, NOT, OR, EXISTS data and
@@ -470,3 +552,20 @@ class JSON2SQLGenerator(object):
         :return: (string|unicode) escaped string
         """
         return MySQLdb.escape_string(value)
+
+    def extract_key_from_nested_dict(self, target_dict, key):
+        """
+        Traverse the dictionary recursively and return the value with specified key
+
+        :type target_dict: Dict
+        :type key: str
+        """
+        assert isinstance(target_dict, dict)
+        assert isinstance(key, str) and key
+
+        for k, v in target_dict.items():
+            if k == key:
+                yield v
+            elif isinstance(v, dict):
+                for item in self.extract_key_from_nested_dict(v):
+                    yield item
