@@ -254,7 +254,7 @@ class JSON2SQLGenerator(object):
         if len(group_by_fields) == 0:
             return ''
 
-        result = []
+        result = ''
         fully_qualified_field_names = map(
             lambda field_id: '`{table_name}`.`{field_name}`'.format(
                 table_name=self.field_mapping[field_id][self.TABLE_NAME],
@@ -263,25 +263,26 @@ class JSON2SQLGenerator(object):
             group_by_fields
         )
 
-        result.append('GROUP BY {fields}'.format(fields=', '.join(fully_qualified_field_names)))
+        result += 'GROUP BY {fields}'.format(fields=', '.join(fully_qualified_field_names))
         if len(having_clause.keys()) > 0:
-            result.append('HAVING {condition}'.format(condition=self._generate_sql_condition(having_clause)))
+            result += 'HAVING {condition}'.format(condition=self._generate_sql_condition(having_clause))
 
-        return ' '.join(result)
+        return result
 
     def validate_group_by_data(self, group_by_fields, having):
         """
         Validate the group by data to check if it can produce a query which is valid.
         For example it would check only group by fields or aggregate functions are being used.
 
-        :type having_clause: Dict
+        :type having: Dict
         :type group_by_fields: List[int]
         """
         assert isinstance(group_by_fields, list)
         assert isinstance(having, dict)
 
         for cond in self.extract_key_from_nested_dict(having, self.WHERE_CONDITION):
-            assert 'aggregate_lhs' in cond or cond['field'] in group_by_fields, \
+            assert isinstance(cond, dict), 'where condition needs to be dict'
+            assert 'aggregate_lhs' in cond or cond.get('field') in group_by_fields, \
                 'Use of non aggregate value or non grouped field: {}'.format(cond)
 
         return True
@@ -289,10 +290,10 @@ class JSON2SQLGenerator(object):
     def validate_where_data(self, where_data):
         """
         Validate if where fields doesn't contains use of aggregation function
-
         :type where_data: Dict
         """
-        assert isinstance(where_data, dict)
+        assert isinstance(where_data, dict) and len(where_data) > 0, \
+            'Invalid or empty where data'
 
         for cond in self.extract_key_from_nested_dict(where_data, self.WHERE_CONDITION):
             assert 'aggregate_lhs' not in cond, \
@@ -551,17 +552,17 @@ class JSON2SQLGenerator(object):
         """
         return MySQLdb.escape_string(value)
 
-    def extract_key_from_nested_dict(self, d, key):
+    def extract_key_from_nested_dict(self, target_dict, key):
         """
         Traverse the dictionary recursively and return the value with specified key
 
-        :type d: Dict
+        :type target_dict: Dict
         :type key: str
         """
-        assert isinstance(d, dict)
-        assert isinstance(key, str) and len(key) > 0
+        assert isinstance(target_dict, dict)
+        assert isinstance(key, str) and key
 
-        for k, v in d.items():
+        for k, v in target_dict.items():
             if k == key:
                 yield v
             elif isinstance(v, dict):
