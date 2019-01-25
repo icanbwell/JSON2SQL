@@ -296,6 +296,7 @@ class JSON2SQLGenerator(object):
             'Invalid or empty where data'
 
         for cond in self.extract_key_from_nested_dict(where_data, self.WHERE_CONDITION):
+            assert isinstance(cond, dict), 'Invalid where condition'
             assert 'aggregate_lhs' not in cond, \
                 'Use of non aggregate value or non grouped field: {}'.format(cond)
 
