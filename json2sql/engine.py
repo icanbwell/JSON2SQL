@@ -391,7 +391,7 @@ class JSON2SQLGenerator(object):
                 [value, secondary_value], data_type
             )
 
-        lhs = u'`{table}`.`{field}`'.format(table=table, field=field)  # type: unicode
+        lhs = u'`{table}`.`{field}`'.format(table=table, field=field_name)  # type: unicode
 
         # Apply aggregate function to L.H.S
         if 'aggregate_lhs' in where:
