@@ -381,9 +381,9 @@ class JSON2SQLGenerator(object):
 
         # Make string SQL injection proof
         if sql_operator != self.VALUE_OPERATORS.is_op and data_type == self.STRING:
-            self._sql_injection_proof(value)
+            value = self._sql_injection_proof(value)
             if secondary_value:
-                self._sql_injection_proof(secondary_value)
+                secondary_value = self._sql_injection_proof(secondary_value)
 
         # Make value sql proof. For ex: if value is string or data convert it to '<value>'
         sql_value, secondary_sql_value = self._convert_values(
