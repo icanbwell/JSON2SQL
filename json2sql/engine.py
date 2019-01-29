@@ -372,6 +372,7 @@ class JSON2SQLGenerator(object):
         if sql_operator == self.VALUE_OPERATORS.is_op:
             # In case of `IS` operator value is not going to be of data type
             assert value.upper() in self.IS_OPERATOR_VALUE, 'Invalid rhs for `IS` operator'
+            sql_value, secondary_sql_value = value.upper(), None
         else:
             # Check if the primary value and data_type are in sync
             self._sanitize_value(value, data_type)
@@ -379,16 +380,16 @@ class JSON2SQLGenerator(object):
             if secondary_value:
                 self._sanitize_value(secondary_value, data_type)
 
-        # Make string SQL injection proof
-        if sql_operator != self.VALUE_OPERATORS.is_op and data_type == self.STRING:
-            value = self._sql_injection_proof(value)
-            if secondary_value:
-                secondary_value = self._sql_injection_proof(secondary_value)
+            # Make string SQL injection proof
+            if data_type == self.STRING:
+                value = self._sql_injection_proof(value)
+                if secondary_value:
+                    secondary_value = self._sql_injection_proof(secondary_value)
 
-        # Make value sql proof. For ex: if value is string or data convert it to '<value>'
-        sql_value, secondary_sql_value = self._convert_values(
-            [value, secondary_value], data_type
-        )
+            # Make value sql proof. For ex: if value is string or data convert it to '<value>'
+            sql_value, secondary_sql_value = self._convert_values(
+                [value, secondary_value], data_type
+            )
 
         lhs = u'`{table}`.`{field}`'.format(table=table, field=field)  # type: unicode
 
