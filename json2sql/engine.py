@@ -369,8 +369,11 @@ class JSON2SQLGenerator(object):
         data_type = self._get_data_type(field)
         table = self._get_table_name(field)
 
+        # `value` contains the R.H.S part of the equation.
+        # In case of `IS` operator R.H.S can be `NULL` or `NOT NULL`
+        # irrespective of data type of the L.H.S.
+        # Hence we want to skip data type check for `IS` operator.
         if sql_operator == self.VALUE_OPERATORS.is_op:
-            # In case of `IS` operator value is not going to be of data type
             assert value.upper() in self.IS_OPERATOR_VALUE, 'Invalid rhs for `IS` operator'
             sql_value, secondary_sql_value = value.upper(), None
         else:
