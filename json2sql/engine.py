@@ -118,6 +118,11 @@ class JSON2SQLGenerator(object):
         self.base_table = base_table
         assert self.validate_where_data(data.get('where_data', {})), 'Invalid where data'
         where_phrase = self._generate_sql_condition(data['where_data'])
+
+        if 'group_by_fields' in data:
+            assert isinstance(data['group_by_fields'], list), 'Group by fields need to list of dict'
+            data['group_by_fields'] = list(map(lambda x: int(x['field']), data['group_by_fields']))
+
         path_subset = self.extract_paths_subset(list(
             map(lambda field_id: self.field_mapping[field_id][self.TABLE_NAME], data['fields'])),
             data.get('path_hints', {})
