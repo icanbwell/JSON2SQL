@@ -41,7 +41,7 @@ class JSON2SQLGenerator(object):
     ALLOWED_AGGREGATE_FUNCTIONS = {'MIN', 'MAX'}
 
     # Is operator values
-    IS_OPERATOR_VALUE = {'NULL', 'NOT NULL'}
+    IS_OPERATOR_VALUE = {'NULL', 'NOT NULL', 'TRUE', 'FALSE'}
 
     # Supported operators
     VALUE_OPERATORS = namedtuple('VALUE_OPRATORS', [
