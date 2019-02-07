@@ -305,7 +305,7 @@ class JSON2SQLGenerator(object):
 
         for cond in self.extract_key_from_nested_dict(where_data, self.WHERE_CONDITION):
             assert isinstance(cond, dict), 'Invalid where condition'
-            assert 'aggregate_lhs' not in cond, \
+            assert cond.get('aggregate_lhs', '') == '', \
                 'Use of non aggregate value or non grouped field: {}'.format(cond)
 
         return True
