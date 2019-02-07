@@ -273,7 +273,7 @@ class JSON2SQLGenerator(object):
 
         result += 'GROUP BY {fields}'.format(fields=', '.join(fully_qualified_field_names))
         if len(having_clause.keys()) > 0:
-            result += 'HAVING {condition}'.format(condition=self._generate_sql_condition(having_clause))
+            result += ' HAVING {condition}'.format(condition=self._generate_sql_condition(having_clause))
 
         return result
 
