@@ -88,7 +88,7 @@ class JSON2SQLGenerator(object):
     PARENT_TABLE = 'parent_table'
     PARENT_COLUMN = 'parent_column'
 
-    CHALLENGE_CHECK_QUERY = 'EXISTS (SELECT 1 FROM journeys_memberstagechallenge WHERE challenge_id = \'{value}\' AND ' \
+    CHALLENGE_CHECK_QUERY = 'EXISTS (SELECT 1 FROM journeys_memberstagechallenge WHERE challenge_id = {value} AND ' \
                             'completed_date IS NOT NULL AND member_id = patients_member.id) '
 
     def __init__(self, field_mapping, paths):
