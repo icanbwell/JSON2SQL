@@ -47,7 +47,8 @@ class JSON2SQLGenerator(object):
     VALUE_OPERATORS = namedtuple('VALUE_OPRATORS', [
         'equals', 'greater_than', 'less_than',
         'greater_than_equals', 'less_than_equals',
-        'not_equals', 'is_op', 'in_op', 'like', 'between'
+        'not_equals', 'is_op', 'in_op', 'like', 'between',
+        'is_challenge_completed', 'is_challenge_not_completed'
     ])(
         equals='=',
         greater_than='>',
@@ -58,6 +59,8 @@ class JSON2SQLGenerator(object):
         is_op='IS',
         in_op='IN',
         like='LIKE',
+        is_challenge_completed='is_challenge_completed',
+        is_challenge_not_completed='is_challenge_not_completed',
         between=BETWEEN
     )
 
@@ -84,6 +87,9 @@ class JSON2SQLGenerator(object):
     JOIN_COLUMN = 'join_column'
     PARENT_TABLE = 'parent_table'
     PARENT_COLUMN = 'parent_column'
+
+    CHALLENGE_CHECK_QUERY = 'EXISTS (SELECT 1 FROM journeys_memberstagechallenge WHERE challenge_id = \'{value}\' AND ' \
+                            'completed_date IS NOT NULL AND member_id = patients_member.id) '
 
     def __init__(self, field_mapping, paths):
         """
@@ -408,6 +414,15 @@ class JSON2SQLGenerator(object):
                 lhs = u'{func_name}({field_name})'.format(func_name=aggregate_func_name, field_name=lhs)
             else:
                 logger.info("Unsupported aggregate functions: {}".format(aggregate_func_name))
+
+        # TODO: Based on the assumption that below operator will only used
+        #           with challenge.
+        if sql_operator in [self.VALUE_OPERATORS.is_challenge_completed,
+                            self.VALUE_OPERATORS.is_challenge_not_completed]:
+            return "{negate} {check}".format(
+                negate='NOT' if sql_operator == self.VALUE_OPERATORS.is_challenge_not_completed else '',
+                check=self.CHALLENGE_CHECK_QUERY.format(value=sql_value)
+            )
 
         # Generate SQL phrase
         if sql_operator == self.BETWEEN:
