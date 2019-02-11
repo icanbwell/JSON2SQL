@@ -131,12 +131,14 @@ class JSON2SQLGenerator(object):
         join_phrase = self.generate_left_join(join_tables)
         group_by_phrase = self.generate_group_by(data.get('group_by_fields', []),
                                                  data.get('having', {}))
+        count_phrase = u'COUNT(DISTINCT `{base_table}`.`id`)'.format(base_table=base_table)
 
-        return u'SELECT COUNT(*) FROM {base_table} {join_phrase} WHERE {where_phrase} {group_by_fragment}'.format(
+        return u'SELECT {count_phrase} FROM {base_table} {join_phrase} WHERE {where_phrase} {group_by_fragment}'.format(
             join_phrase=join_phrase,
             base_table=base_table,
             where_phrase=where_phrase,
-            group_by_fragment=group_by_phrase
+            group_by_fragment=group_by_phrase,
+            count_phrase=count_phrase
         )
 
     def _parse_multi_path_mapping(self, paths):
