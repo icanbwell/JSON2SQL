@@ -161,7 +161,7 @@ class JSON2SQLGenerator(object):
     def _parse_custom_method_condition(self, data):
         """
         Process the custom method condition to render SQL template using the arguments given.
-        
+
         :param data:
         :return:
         """
@@ -197,7 +197,7 @@ class JSON2SQLGenerator(object):
         elif data_type.upper() == 'INTEGER':
             return int(parameter_data['value'])
         elif data_type.upper() == 'STRING':
-            return parameter_data['value']
+            return "'{}'".format(self._sql_injection_proof(parameter_data['value']))
         else:
             raise AttributeError("Unsupported data type for parameter: {}".format(data_type))
 
