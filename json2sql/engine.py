@@ -45,7 +45,7 @@ class JSON2SQLGenerator(object):
     ALLOWED_AGGREGATE_FUNCTIONS = {'MIN', 'MAX'}
 
     # Custom methods field types
-    ALLOWED_CUSTOM_METHOD_PARAM_TYPES = {'field', 'integer', 'string'}
+    ALLOWED_CUSTOM_METHOD_PARAM_TYPES = {'field', 'integer', 'string', 'date'}
 
     # Is operator values
     IS_OPERATOR_VALUE = {'NULL', 'NOT NULL', 'TRUE', 'FALSE'}
@@ -116,7 +116,7 @@ class JSON2SQLGenerator(object):
         self.base_table = ''
         self.field_mapping = self._parse_field_mapping(field_mapping)
         self.path_mapping = self._parse_multi_path_mapping(paths)
-        self.custom_methods = self._parse_custom_methods(custom_methods)
+        self.custom_methods = self._validate_custom_methods(custom_methods)
 
         # Mapping to be used to parse various combination keywords data
         self.WHERE_CONDITION_MAPPING = {
@@ -128,7 +128,7 @@ class JSON2SQLGenerator(object):
             self.CUSTOM_METHOD_CONDITION: '_parse_custom_method_condition',
         }
 
-    def _parse_custom_methods(self, sql_templates):
+    def _validate_custom_methods(self, sql_templates):
         """
         Validate the template data and pre process the data.
 
@@ -195,6 +195,7 @@ class JSON2SQLGenerator(object):
                 table=field_data[self.TABLE_NAME], field=field_data[self.FIELD_NAME]
             )
         elif data_type.upper() == 'INTEGER':
+            self._sanitize_value(parameter_data['value'], data_type.lower())
             return int(parameter_data['value'])
         elif data_type.upper() == 'STRING':
             return "'{}'".format(self._sql_injection_proof(parameter_data['value']))
