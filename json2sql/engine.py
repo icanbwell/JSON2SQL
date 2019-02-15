@@ -1,5 +1,8 @@
 import datetime
+import json
 import logging
+import re
+
 import MySQLdb
 
 from collections import namedtuple, defaultdict
@@ -18,6 +21,7 @@ class JSON2SQLGenerator(object):
     OR_CONDITION = 'or'
     NOT_CONDITION = 'not'
     EXISTS_CONDITION = 'exists'
+    CUSTOM_METHOD_CONDITION = 'custom_method'
 
     # Supported data types by plugin
     INTEGER = 'integer'
@@ -39,6 +43,9 @@ class JSON2SQLGenerator(object):
 
     # MySQL aggregate functions
     ALLOWED_AGGREGATE_FUNCTIONS = {'MIN', 'MAX'}
+
+    # Custom methods field types
+    ALLOWED_CUSTOM_METHOD_PARAM_TYPES = {'field', 'integer', 'string', 'date'}
 
     # Is operator values
     IS_OPERATOR_VALUE = {'NULL', 'NOT NULL', 'TRUE', 'FALSE'}
@@ -91,9 +98,15 @@ class JSON2SQLGenerator(object):
     CHALLENGE_CHECK_QUERY = 'EXISTS (SELECT 1 FROM journeys_memberstagechallenge WHERE challenge_id = {value} AND ' \
                             'completed_date IS NOT NULL AND member_id = patients_member.id) '
 
-    def __init__(self, field_mapping, paths):
+    # - Used in custom method mapping -
+    TEMPLATE_STR_KEY = 'template_str'
+    TEMPLATE_PARAMS_KEY = 'parameters'
+    TEMPLATE_KEY_REGEX = r"{(\w+)}"
+
+    def __init__(self, field_mapping, paths, custom_methods):
         """
         Initialise basic params.
+        :type custom_methods: (tuple) tuple of tuples containing (id, sql_template, variables)
         :param field_mapping: (tuple) tuple of tuples containing (field_identifier, field_name, table_name).
         :param paths: (tuple) tuple of tuples containing (join_table, join_field, parent_table, parent_field).
                       Information about paths from a model to reach to a specific model and when to stop.
@@ -103,6 +116,7 @@ class JSON2SQLGenerator(object):
         self.base_table = ''
         self.field_mapping = self._parse_field_mapping(field_mapping)
         self.path_mapping = self._parse_multi_path_mapping(paths)
+        self.custom_methods = self._validate_custom_methods(custom_methods)
 
         # Mapping to be used to parse various combination keywords data
         self.WHERE_CONDITION_MAPPING = {
@@ -111,7 +125,82 @@ class JSON2SQLGenerator(object):
             self.OR_CONDITION: '_parse_or',
             self.NOT_CONDITION: '_parse_not',
             self.EXISTS_CONDITION: '_parse_exists',
+            self.CUSTOM_METHOD_CONDITION: '_parse_custom_method_condition',
         }
+
+    def _validate_custom_methods(self, sql_templates):
+        """
+        Validate the template data and pre process the data.
+
+        :param sql_templates: (tuple) tuple of tuples containing (id, sql_template, variables)
+        :return: (dict) { template_id: { template_str:, template_parameters: }
+        """
+        template_mapping = {}
+
+        for template_id, template_str, parameters in sql_templates:
+            template_id = int(template_id)
+            parameters = json.loads(parameters)
+            template_str = template_str.strip()
+
+            assert len(template_str) > 0, 'Not a valid template string'
+            assert template_id not in template_mapping, 'Template id must be unique'
+            template_defined_variables = set(re.findall(self.TEMPLATE_KEY_REGEX, template_str, re.MULTILINE))
+            # Checks if variable defined in template string and variables declared are exactly same
+            assert len(set(parameters.keys()) ^ template_defined_variables) == 0, 'Extra variable defined'
+            # Checks parameter types are permitted
+            assert len(set(map(lambda l: l['data_type'], parameters.values()))
+                       - self.ALLOWED_CUSTOM_METHOD_PARAM_TYPES) == 0, 'Invalid data type defined'
+
+            template_mapping[template_id] = {
+                self.TEMPLATE_STR_KEY: template_str,
+                self.TEMPLATE_PARAMS_KEY: parameters
+            }
+
+        return template_mapping
+
+    def _parse_custom_method_condition(self, data):
+        """
+        Process the custom method condition to render SQL template using the arguments given.
+
+        :param data: (dict) Expect dict of custom methods of format {template_id:, parameters: }
+        :return:
+        """
+        assert isinstance(data, dict), 'Input data must be a dict'
+        assert 'template_id' in data, 'No template_id is provided'
+        template_id = int(data['template_id'])
+        template_data = self.custom_methods[template_id]
+
+        # Process parameters
+        validated_parameters = {}
+        for param_id, param_data in data.get('parameters', {}).items():
+            assert param_id in template_data[self.TEMPLATE_PARAMS_KEY], 'Invalid parameter name.'
+            param_type = template_data[self.TEMPLATE_PARAMS_KEY][param_id]['data_type']
+
+            validated_parameters[param_id] = self._process_parameter(param_type, param_data)
+
+        # Check that we have collected all the required keys
+        template_params = template_data[self.TEMPLATE_PARAMS_KEY].keys()
+        assert len(set(template_params) ^ set(validated_parameters.keys())) == 0, \
+            'Missing or extra template variable'
+
+        return template_data[self.TEMPLATE_STR_KEY].format(**validated_parameters)
+
+    def _process_parameter(self, data_type, parameter_data):
+        assert len(data_type) > 0, 'Invalid data type'
+        assert isinstance(parameter_data, dict), 'Invalid parameter data format'
+
+        self._sanitize_value(parameter_data['value'], data_type.lower())
+        if data_type.upper() == 'FIELD':
+            field_data = self.field_mapping[parameter_data['field']]
+            return "`{table}`.`{field}`".format(
+                table=field_data[self.TABLE_NAME], field=field_data[self.FIELD_NAME]
+            )
+        elif data_type.upper() == 'INTEGER':
+            return int(parameter_data['value'])
+        elif data_type.upper() == 'STRING':
+            return "'{}'".format(self._sql_injection_proof(parameter_data['value']))
+        else:
+            raise AttributeError("Unsupported data type for parameter: {}".format(data_type))
 
     def generate_sql(self, data, base_table):
         """
