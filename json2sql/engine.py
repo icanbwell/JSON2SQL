@@ -133,7 +133,7 @@ class JSON2SQLGenerator(object):
         Validate the template data and pre process the data.
 
         :param sql_templates: (tuple) tuple of tuples containing (id, sql_template, variables)
-        :return:
+        :return: (dict) { template_id: { template_str:, template_parameters: }
         """
         template_mapping = {}
 
@@ -162,7 +162,7 @@ class JSON2SQLGenerator(object):
         """
         Process the custom method condition to render SQL template using the arguments given.
 
-        :param data:
+        :param data: (dict) Expect dict of custom methods of format {template_id:, parameters: }
         :return:
         """
         assert isinstance(data, dict), 'Input data must be a dict'
@@ -189,13 +189,13 @@ class JSON2SQLGenerator(object):
         assert len(data_type) > 0, 'Invalid data type'
         assert isinstance(parameter_data, dict), 'Invalid parameter data format'
 
+        self._sanitize_value(parameter_data['value'], data_type.lower())
         if data_type.upper() == 'FIELD':
             field_data = self.field_mapping[parameter_data['field']]
             return "`{table}`.`{field}`".format(
                 table=field_data[self.TABLE_NAME], field=field_data[self.FIELD_NAME]
             )
         elif data_type.upper() == 'INTEGER':
-            self._sanitize_value(parameter_data['value'], data_type.lower())
             return int(parameter_data['value'])
         elif data_type.upper() == 'STRING':
             return "'{}'".format(self._sql_injection_proof(parameter_data['value']))
