@@ -189,7 +189,8 @@ class JSON2SQLGenerator(object):
         assert len(data_type) > 0, 'Invalid data type'
         assert isinstance(parameter_data, dict), 'Invalid parameter data format'
 
-        self._sanitize_value(parameter_data['value'], data_type.lower())
+        if not data_type.upper() == 'FIELD':
+            self._sanitize_value(parameter_data['value'], data_type.lower())
         if data_type.upper() == 'FIELD':
             field_data = self.field_mapping[parameter_data['field']]
             return "`{table}`.`{field}`".format(
