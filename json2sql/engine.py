@@ -189,7 +189,8 @@ class JSON2SQLGenerator(object):
         assert len(data_type) > 0, 'Invalid data type'
         assert isinstance(parameter_data, dict), 'Invalid parameter data format'
 
-        self._sanitize_value(parameter_data['value'], data_type.lower())
+        if 'value' in parameter_data:
+            self._sanitize_value(parameter_data['value'], data_type.lower())
         if data_type.upper() == 'FIELD':
             field_data = self.field_mapping[parameter_data['field']]
             return "`{table}`.`{field}`".format(
@@ -690,5 +691,5 @@ class JSON2SQLGenerator(object):
             if k == key:
                 yield v
             elif isinstance(v, dict):
-                for item in self.extract_key_from_nested_dict(v):
+                for item in self.extract_key_from_nested_dict(v, key):
                     yield item
