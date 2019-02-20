@@ -691,5 +691,5 @@ class JSON2SQLGenerator(object):
             if k == key:
                 yield v
             elif isinstance(v, dict):
-                for item in self.extract_key_from_nested_dict(v):
+                for item in self.extract_key_from_nested_dict(v, key):
                     yield item
