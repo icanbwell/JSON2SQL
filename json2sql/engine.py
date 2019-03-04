@@ -42,7 +42,7 @@ class JSON2SQLGenerator(object):
     BINARY_OPERATORS = (BETWEEN, )
 
     # MySQL aggregate functions
-    ALLOWED_AGGREGATE_FUNCTIONS = {'MIN', 'MAX'}
+    ALLOWED_AGGREGATE_FUNCTIONS = {'MIN', 'MAX', 'COUNT'}
 
     # Custom methods field types
     ALLOWED_CUSTOM_METHOD_PARAM_TYPES = {'field', 'integer', 'string', 'date'}
@@ -103,7 +103,13 @@ class JSON2SQLGenerator(object):
     TEMPLATE_PARAMS_KEY = 'parameters'
     TEMPLATE_KEY_REGEX = r"{(\w+)}"
 
-    def __init__(self, field_mapping, paths, custom_methods):
+    # - Used in subquery mapping -
+    SUBQUERY_STR_KEY = 'subquery_template_str'
+    SUBQUERY_PARAMS_KEY = 'subquery_params'
+    SUBQUERY_FIELDS_KEY = 'subquery_fields'
+    SUBQUERY_IS_SQL = 'subquery_is_sql'
+
+    def __init__(self, data):
         """
         Initialise basic params.
         :type custom_methods: (tuple) tuple of tuples containing (id, sql_template, variables)
@@ -113,10 +119,16 @@ class JSON2SQLGenerator(object):
         :return: None
         """
 
+        assert 'field_mapping' in data, 'Field mapping key is required in data when initializing params'
+        assert 'paths' in data, 'Paths key is required in data when initializing params'
+        assert 'custom_methods' in data, 'Custom Methods key is required in data when initializing params'
+        assert 'subqueries' in data, 'Subqueries key is required in data when initializing params'
+
         self.base_table = ''
-        self.field_mapping = self._parse_field_mapping(field_mapping)
-        self.path_mapping = self._parse_multi_path_mapping(paths)
-        self.custom_methods = self._validate_custom_methods(custom_methods)
+        self.field_mapping = self._parse_field_mapping(data.get('field_mapping'))
+        self.path_mapping = self._parse_multi_path_mapping(data.get('paths'))
+        self.custom_methods = self._validate_custom_methods(data.get('custom_methods'))
+        self.subquery_mapping = self._parse_subquery_mapping(data.get('subqueries'))
 
         # Mapping to be used to parse various combination keywords data
         self.WHERE_CONDITION_MAPPING = {
@@ -157,6 +169,52 @@ class JSON2SQLGenerator(object):
             }
 
         return template_mapping
+    
+    def _validate_subquery(self, subquery):
+        """
+        Validate the sub-query data.
+        :param subquery: (dict) Sub-Query dict containing (id, template, fields, parameters, is_sql)
+        :return:
+        """
+        assert isinstance(subquery[self.SUBQUERY_FIELDS_KEY], dict), 'Fields is not a valid json data'
+        if subquery[self.SUBQUERY_IS_SQL]:
+            template_variables = set(re.findall(self.TEMPLATE_KEY_REGEX, subquery[self.SUBQUERY_STR_KEY], re.MULTILINE))
+            if len(set(template_variables)):
+                parameters = subquery[self.SUBQUERY_PARAMS_KEY]
+                assert isinstance(parameters, dict), 'Parameters is not a valid json data'
+                # Checks if variable defined in template string and variables declared are exactly same
+                assert len(set(parameters.keys()) ^ set(template_variables)) == 0, 'Extra variable defined'
+                # Checks parameter types are permitted
+                assert len(set(map(lambda l: l['data_type'], parameters.values()))
+                           - self.ALLOWED_CUSTOM_METHOD_PARAM_TYPES) == 0, 'Invalid data type defined'
+
+        else:
+            assert isinstance(subquery[self.SUBQUERY_STR_KEY], dict), 'Template is not a valid json data'
+
+    def _parse_subquery_mapping(self, subqueries):
+        """
+        Validate the template data and pre process the data.
+
+        :param subqueries: (tuple) tuple of tuples containing (id, sql_template, variables)
+        :return: (dict) { template_id: { template_str:, template_parameters: }
+        """
+        subquery_mapping = {}
+        for subquery_id, is_sql, template_str, fields, parameters in subqueries:
+            subquery_id = int(subquery_id)
+            parameters = json.loads(parameters)
+            fields = json.loads(fields)
+
+            if not is_sql:
+                template_str = json.loads(template_str)
+            assert subquery_id not in subquery_mapping, 'Subquery id must be unique'
+
+            subquery_mapping[subquery_id] = {
+                self.SUBQUERY_STR_KEY: template_str,
+                self.SUBQUERY_PARAMS_KEY: parameters,
+                self.SUBQUERY_FIELDS_KEY: fields,
+                self.SUBQUERY_IS_SQL: is_sql
+            }
+        return subquery_mapping
 
     def _parse_custom_method_condition(self, data):
         """
@@ -203,12 +261,13 @@ class JSON2SQLGenerator(object):
         else:
             raise AttributeError("Unsupported data type for parameter: {}".format(data_type))
 
-    def generate_sql(self, data, base_table):
+    def generate_sql(self, data, base_table, select_fields=None):
         """
         Create SQL query from provided json
         :param data: (dict) Actual JSON containing nested condition data.
                      Must contain two keys - fields(contains list of fields involved in SQL) and where_data(JSON data)
         :param base_table: (string) Exact table name as in DB to be used with FROM clause in SQL.
+        :param select_fields: (dict) JSON containing select fields
         :return: (unicode) Finalized SQL query unicode
         """
         self.base_table = base_table
@@ -227,15 +286,18 @@ class JSON2SQLGenerator(object):
         join_phrase = self.generate_left_join(join_tables)
         group_by_phrase = self.generate_group_by(data.get('group_by_fields', []),
                                                  data.get('having', {}))
-        count_phrase = u'COUNT(DISTINCT `{base_table}`.`id`)'.format(base_table=base_table)
+        sub_query_phrase = self.generate_subquery(data.get('sub_queries', []))
+        select_phrase = self.generate_select_phrase(select_fields)
 
-        return u'SELECT {count_phrase} FROM {base_table} {join_phrase} WHERE {where_phrase} {group_by_fragment}'.format(
-            join_phrase=join_phrase,
-            base_table=base_table,
-            where_phrase=where_phrase,
-            group_by_fragment=group_by_phrase,
-            count_phrase=count_phrase
-        )
+        return u'SELECT {select_phrase} FROM {base_table} {sub_query_phrase} {join_phrase}' \
+               u' WHERE {where_phrase} {group_by_fragment}'.format(
+                    join_phrase=join_phrase,
+                    base_table=base_table,
+                    where_phrase=where_phrase,
+                    group_by_fragment=group_by_phrase,
+                    select_phrase=select_phrase,
+                    sub_query_phrase=sub_query_phrase
+                )
 
     def _parse_multi_path_mapping(self, paths):
         """
@@ -375,6 +437,87 @@ class JSON2SQLGenerator(object):
 
         return result
 
+    def generate_subquery(self, subqueries):
+        result = []
+        for subquery_dict in subqueries:
+            # Check if id is present in the subquery dict
+            assert 'id' in subquery_dict, 'No subquery id provided'
+            subquery = self.subquery_mapping[subquery_dict['id']]
+
+            # Validate given subquery
+            self._validate_subquery(subquery)
+
+            # Check if alias for the subquery is present
+            assert 'alias' in subquery_dict, 'Alias is not present'
+            alias = subquery_dict.get('alias')
+
+            select_fields = subquery[self.SUBQUERY_FIELDS_KEY]
+            join_fld = None
+            for select_field_id, select_field_data in select_fields.items():
+                if 'is_member_id' in select_field_data and select_field_data.get('is_member_id'):
+                    assert 'alias' in select_field_data, 'Alias is required for {} field'.format(select_field_id)
+                    join_fld = select_field_data.get('alias')
+
+            if subquery[self.SUBQUERY_IS_SQL]:
+                # Process parameters
+                validated_parameters = {}
+                for param_id, param_data in subquery_dict.get('parameters', {}).items():
+                    assert param_id in subquery[self.SUBQUERY_PARAMS_KEY], 'Invalid parameter name.'
+                    param_type = subquery[self.SUBQUERY_PARAMS_KEY][param_id]['data_type']
+
+                    validated_parameters[param_id] = self._process_parameter(param_type, param_data)
+                sql = subquery[self.SUBQUERY_STR_KEY].format(**validated_parameters)
+                assert join_fld is not None, 'Member id mapping is required in the subquery'
+            else:
+                if not join_fld: 
+                    select_join_fld = 'id'
+                    join_fld = 'member_id'
+                    select_fields.update(
+                        {'join_field': {'alias': join_fld, 'field': select_join_fld, 'category': self.base_table}}
+                    )
+                sql = self.generate_sql(
+                    subquery[self.SUBQUERY_STR_KEY], self.base_table, select_fields
+                )
+            result.append('LEFT JOIN ( {sql} ) AS {alias} ON `{join_tbl}`.`{join_fld}` = `{parent_tbl}`.`id`'.format(
+                sql=sql, alias=alias, join_tbl=alias, join_fld=join_fld, parent_tbl=self.base_table
+            ))
+        return ' '.join(result)
+
+    def generate_select_phrase(self, select_fields=None):
+        """
+        Function to create select phrase for a sql
+        :param select_fields: (dict) JSON which contains the select fields
+        :return: (unicode) select fields for a SQL
+        """
+        if select_fields:
+            select_phrase = []
+            for select_field_id, select_field_data in select_fields.items():
+                if type(select_field_data['field']) == int:
+                    field_name = self.field_mapping[select_field_data['field']][self.FIELD_NAME]
+                    table = self._get_table_name(select_field_data['field'])
+                else:
+                    field_name = select_field_data['field']
+                    table = select_field_data['category']
+                select_field = '`{table}`.`{field_name}`'.format(table=table, field_name=field_name)
+
+                # Apply aggregate function to select fields
+                if 'aggregate_lhs' in select_field_data and select_field_data.get('aggregate_lhs'):
+                    aggregate_func_name = select_field_data['aggregate_lhs'].upper()  # type: unicode
+                    assert aggregate_func_name in self.ALLOWED_AGGREGATE_FUNCTIONS, \
+                        'Unsupported aggregate functions: {}'.format(aggregate_func_name)
+                    select_field = '{func_name}({field_name})'.format(
+                        func_name=aggregate_func_name, field_name=select_field
+                    )
+
+                assert 'alias' in select_field_data, 'Alias name is missing for {select_field} ' \
+                                                     'select field in subquery'.format(select_field=select_field)
+                select_phrase.append('{select_field} AS {alias}'.format(
+                    select_field=select_field, alias=select_field_data['alias']
+                ))
+            return ', '.join(select_phrase)
+        else:
+            return 'COUNT(DISTINCT `{base_table}`.`id`)'.format(base_table=self.base_table)
+
     def validate_group_by_data(self, group_by_fields, having):
         """
         Validate the group by data to check if it can produce a query which is valid.
@@ -464,13 +607,25 @@ class JSON2SQLGenerator(object):
             )
         # Get all the data elements required and validate them
         operator, value, field, secondary_value = self._get_validated_data(where)
-        # Get db field name
-        field_name = self.field_mapping[field][self.FIELD_NAME]
         # Get corresponding SQL operator
         sql_operator = getattr(self.VALUE_OPERATORS, operator)
-        # Get data type and table name from field_mapping
+        if 'subquery' in where:
+            subquery = self.subquery_mapping[where.get('subquery')]
+            select_fields = subquery.get(self.SUBQUERY_FIELDS_KEY)
+            subquery_select_field = select_fields.get(field)
+            # Get alias db field name from where data
+            field_name = subquery_select_field.get('alias')
+            # Get alias table name from where data
+            table = where.get('alias')
+            field=subquery_select_field.get('field')
+        else:
+            # Get db field name from field_mapping
+            field_name = self.field_mapping[field][self.FIELD_NAME]
+            # Get table name from field_mapping
+            table = self._get_table_name(field)
+
+        # Get data type from field_mapping
         data_type = self._get_data_type(field)
-        table = self._get_table_name(field)
 
         # `value` contains the R.H.S part of the equation.
         # In case of `IS` operator R.H.S can be `NULL` or `NOT NULL`
