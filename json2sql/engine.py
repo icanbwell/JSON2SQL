@@ -176,12 +176,12 @@ class JSON2SQLGenerator(object):
         :param subquery: (dict) Sub-Query dict containing (id, template, fields, parameters, is_sql)
         :return:
         """
-        assert isinstance(subquery[self.SUBQUERY_FIELDS_KEY], dict), 'Fields is not a valid json data'
+        assert isinstance(subquery[self.SUBQUERY_FIELDS_KEY], dict), 'Sub-Query fields is not a valid json data'
         if subquery[self.SUBQUERY_IS_SQL]:
             template_variables = set(re.findall(self.TEMPLATE_KEY_REGEX, subquery[self.SUBQUERY_STR_KEY], re.MULTILINE))
             if len(set(template_variables)):
                 parameters = subquery[self.SUBQUERY_PARAMS_KEY]
-                assert isinstance(parameters, dict), 'Parameters is not a valid json data'
+                assert isinstance(parameters, dict), 'Sub-Query parameters is not a valid json data'
                 # Checks if variable defined in template string and variables declared are exactly same
                 assert len(set(parameters.keys()) ^ set(template_variables)) == 0, 'Extra variable defined'
                 # Checks parameter types are permitted
@@ -189,7 +189,7 @@ class JSON2SQLGenerator(object):
                            - self.ALLOWED_CUSTOM_METHOD_PARAM_TYPES) == 0, 'Invalid data type defined'
 
         else:
-            assert isinstance(subquery[self.SUBQUERY_STR_KEY], dict), 'Template is not a valid json data'
+            assert isinstance(subquery[self.SUBQUERY_STR_KEY], dict), 'Sub-Query template is not a valid json data'
 
     def _parse_subquery_mapping(self, subqueries):
         """
