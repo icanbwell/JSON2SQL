@@ -301,7 +301,7 @@ class JSON2SQLGenerator(object):
                                                  data.get('having', {}))
         if alias_params is None:
             alias_params = self._generate_alias_params(data.get('sub_queries', []))
-        sub_query_phrase = self.generate_subquery(data.get('sub_queries', [], alias_params))
+        sub_query_phrase = self.generate_subquery(data.get('sub_queries', []), alias_params)
         select_phrase = self.generate_select_phrase(select_fields)
 
         return u'SELECT {select_phrase} FROM {base_table} {sub_query_phrase} {join_phrase}' \
