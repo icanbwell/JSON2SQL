@@ -169,7 +169,7 @@ class JSON2SQLGenerator(object):
             }
 
         return template_mapping
-    
+
     def _validate_subquery(self, subquery):
         """
         Validate the sub-query data.
@@ -261,7 +261,20 @@ class JSON2SQLGenerator(object):
         else:
             raise AttributeError("Unsupported data type for parameter: {}".format(data_type))
 
-    def generate_sql(self, data, base_table, select_fields=None):
+    def _generate_alias_params(self, subqueries):
+        """
+        Creates dict of alias and it's params so that we can use it to create sql
+        :param subqueries: subqueries data passed in an eligibility json
+        :return: (dict) Dict containing all alias and there params
+        """
+        alias_params = {}
+        for subquery in subqueries:
+            assert 'alias' in subquery, 'Alias is not present'
+            alias = subquery.get('alias')
+            alias_params[alias] = subquery.get('parameters', {})
+        return alias_params
+
+    def generate_sql(self, data, base_table, select_fields=None, alias_params=None):
         """
         Create SQL query from provided json
         :param data: (dict) Actual JSON containing nested condition data.
@@ -286,7 +299,9 @@ class JSON2SQLGenerator(object):
         join_phrase = self.generate_left_join(join_tables)
         group_by_phrase = self.generate_group_by(data.get('group_by_fields', []),
                                                  data.get('having', {}))
-        sub_query_phrase = self.generate_subquery(data.get('sub_queries', []))
+        if alias_params is None:
+            alias_params = self._generate_alias_params(data.get('sub_queries', []))
+        sub_query_phrase = self.generate_subquery(data.get('sub_queries', []), alias_params)
         select_phrase = self.generate_select_phrase(select_fields)
 
         return u'SELECT {select_phrase} FROM {base_table} {sub_query_phrase} {join_phrase}' \
@@ -437,50 +452,49 @@ class JSON2SQLGenerator(object):
 
         return result
 
-    def generate_subquery(self, subqueries):
+    def generate_subquery(self, subqueries, alias_params):
         result = []
         for subquery_dict in subqueries:
-            # Check if id is present in the subquery dict
-            assert 'id' in subquery_dict, 'No subquery id provided'
-            subquery = self.subquery_mapping[subquery_dict['id']]
+            if 'id' in subquery_dict:
+                subquery = self.subquery_mapping[subquery_dict['id']]
 
-            # Validate given subquery
-            self._validate_subquery(subquery)
+                # Validate given subquery
+                self._validate_subquery(subquery)
 
-            # Check if alias for the subquery is present
-            assert 'alias' in subquery_dict, 'Alias is not present'
-            alias = subquery_dict.get('alias')
+                # Check if alias for the subquery is present
+                assert 'alias' in subquery_dict, 'Alias is not present'
+                alias = subquery_dict.get('alias')
 
-            select_fields = subquery[self.SUBQUERY_FIELDS_KEY]
-            join_fld = None
-            for select_field_id, select_field_data in select_fields.items():
-                if 'is_member_id' in select_field_data and select_field_data.get('is_member_id'):
-                    assert 'alias' in select_field_data, 'Alias is required for {} field'.format(select_field_id)
-                    join_fld = select_field_data.get('alias')
+                select_fields = subquery[self.SUBQUERY_FIELDS_KEY]
+                join_fld = None
+                for select_field_id, select_field_data in select_fields.items():
+                    if 'is_member_id' in select_field_data and select_field_data.get('is_member_id'):
+                        assert 'alias' in select_field_data, 'Alias is required for {} field'.format(select_field_id)
+                        join_fld = select_field_data.get('alias')
 
-            if subquery[self.SUBQUERY_IS_SQL]:
-                # Process parameters
-                validated_parameters = {}
-                for param_id, param_data in subquery_dict.get('parameters', {}).items():
-                    assert param_id in subquery[self.SUBQUERY_PARAMS_KEY], 'Invalid parameter name.'
-                    param_type = subquery[self.SUBQUERY_PARAMS_KEY][param_id]['data_type']
+                if subquery[self.SUBQUERY_IS_SQL]:
+                    # Process parameters
+                    validated_parameters = {}
+                    for param_id, param_data in alias_params.get(alias, {}).items():
+                        assert param_id in subquery[self.SUBQUERY_PARAMS_KEY], 'Invalid parameter name.'
+                        param_type = subquery[self.SUBQUERY_PARAMS_KEY][param_id]['data_type']
 
-                    validated_parameters[param_id] = self._process_parameter(param_type, param_data)
-                sql = subquery[self.SUBQUERY_STR_KEY].format(**validated_parameters)
-                assert join_fld is not None, 'Member id mapping is required in the subquery'
-            else:
-                if not join_fld: 
-                    select_join_fld = 'id'
-                    join_fld = 'member_id'
-                    select_fields.update(
-                        {'join_field': {'alias': join_fld, 'field': select_join_fld, 'category': self.base_table}}
+                        validated_parameters[param_id] = self._process_parameter(param_type, param_data)
+                    sql = subquery[self.SUBQUERY_STR_KEY].format(**validated_parameters)
+                    assert join_fld is not None, 'Member id mapping is required in the subquery'
+                else:
+                    if not join_fld:
+                        select_join_fld = 'id'
+                        join_fld = 'member_id'
+                        select_fields.update(
+                            {'join_field': {'alias': join_fld, 'field': select_join_fld, 'category': self.base_table}}
+                        )
+                    sql = self.generate_sql(
+                        subquery[self.SUBQUERY_STR_KEY], self.base_table, select_fields, alias_params
                     )
-                sql = self.generate_sql(
-                    subquery[self.SUBQUERY_STR_KEY], self.base_table, select_fields
-                )
-            result.append('LEFT JOIN ( {sql} ) AS {alias} ON `{join_tbl}`.`{join_fld}` = `{parent_tbl}`.`id`'.format(
-                sql=sql, alias=alias, join_tbl=alias, join_fld=join_fld, parent_tbl=self.base_table
-            ))
+                result.append('LEFT JOIN ( {sql} ) AS {alias} ON `{join_tbl}`.`{join_fld}` = `{parent_tbl}`.`id`'.format(
+                    sql=sql, alias=alias, join_tbl=alias, join_fld=join_fld, parent_tbl=self.base_table
+                ))
         return ' '.join(result)
 
     def generate_select_phrase(self, select_fields=None):
@@ -750,7 +764,7 @@ class JSON2SQLGenerator(object):
         """
         To parse the AND condition for where clause.
         :param data: (list) contains list of data for conditions that need to be ANDed
-        :return: (unicode) unicode containing SQL condition represeted by data ANDed. 
+        :return: (unicode) unicode containing SQL condition represeted by data ANDed.
                  This SQL can be directly placed in a SQL query
         """
         return self._parse_conditions(self.AND_CONDITION, data)
@@ -759,7 +773,7 @@ class JSON2SQLGenerator(object):
         """
         To parse the OR condition for where clause.
         :param data: (list) contains list of data for conditions that need to be ORed
-        :return: (unicode) unicode containing SQL condition represeted by data ORed. 
+        :return: (unicode) unicode containing SQL condition represeted by data ORed.
                  This SQL can be directly placed in a SQL query
         """
         return self._parse_conditions(self.OR_CONDITION, data)
@@ -769,7 +783,7 @@ class JSON2SQLGenerator(object):
         To parse the EXISTS check/wrapper for where clause.
         :param data: (list) contains a list of single element of data for conditions that
                             need to be wrapped with a EXISTS check in WHERE clause
-        :return: (unicode) unicode containing SQL condition represeted by data with EXISTS check. 
+        :return: (unicode) unicode containing SQL condition represeted by data with EXISTS check.
                  This SQL can be directly placed in a SQL query
         """
         raise NotImplementedError
@@ -779,7 +793,7 @@ class JSON2SQLGenerator(object):
         To parse the NOT check/wrapper for where clause.
         :param data: (list) contains a list of single element of data for conditions that
                             need to be wrapped with a NOT check in WHERE clause
-        :return: (unicode) unicode containing SQL condition represeted by data with NOT check. 
+        :return: (unicode) unicode containing SQL condition represeted by data with NOT check.
                  This SQL can be directly placed in a SQL query
         """
         return self._parse_conditions(self.NOT_CONDITION, data)
@@ -788,7 +802,7 @@ class JSON2SQLGenerator(object):
         """
         To parse AND, NOT, OR, EXISTS data and
         delegate to proper functions to generate combinations according to condition provided.
-        NOTE: This function doesn't do actual parsing. 
+        NOTE: This function doesn't do actual parsing.
               All it does is deligate to a function that would parse the data.
               The main logic for parsing only resides in _generate_where_phrase
               as every condition is similar, its just how we group them
