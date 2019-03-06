@@ -455,47 +455,46 @@ class JSON2SQLGenerator(object):
     def generate_subquery(self, subqueries, alias_params):
         result = []
         for subquery_dict in subqueries:
-            # Check if id is present in the subquery dict
-            assert 'id' in subquery_dict, 'No subquery id provided'
-            subquery = self.subquery_mapping[subquery_dict['id']]
+            if 'id' in subquery_dict:
+                subquery = self.subquery_mapping[subquery_dict['id']]
 
-            # Validate given subquery
-            self._validate_subquery(subquery)
+                # Validate given subquery
+                self._validate_subquery(subquery)
 
-            # Check if alias for the subquery is present
-            assert 'alias' in subquery_dict, 'Alias is not present'
-            alias = subquery_dict.get('alias')
+                # Check if alias for the subquery is present
+                assert 'alias' in subquery_dict, 'Alias is not present'
+                alias = subquery_dict.get('alias')
 
-            select_fields = subquery[self.SUBQUERY_FIELDS_KEY]
-            join_fld = None
-            for select_field_id, select_field_data in select_fields.items():
-                if 'is_member_id' in select_field_data and select_field_data.get('is_member_id'):
-                    assert 'alias' in select_field_data, 'Alias is required for {} field'.format(select_field_id)
-                    join_fld = select_field_data.get('alias')
+                select_fields = subquery[self.SUBQUERY_FIELDS_KEY]
+                join_fld = None
+                for select_field_id, select_field_data in select_fields.items():
+                    if 'is_member_id' in select_field_data and select_field_data.get('is_member_id'):
+                        assert 'alias' in select_field_data, 'Alias is required for {} field'.format(select_field_id)
+                        join_fld = select_field_data.get('alias')
 
-            if subquery[self.SUBQUERY_IS_SQL]:
-                # Process parameters
-                validated_parameters = {}
-                for param_id, param_data in alias_params.get(alias, {}).items():
-                    assert param_id in subquery[self.SUBQUERY_PARAMS_KEY], 'Invalid parameter name.'
-                    param_type = subquery[self.SUBQUERY_PARAMS_KEY][param_id]['data_type']
+                if subquery[self.SUBQUERY_IS_SQL]:
+                    # Process parameters
+                    validated_parameters = {}
+                    for param_id, param_data in alias_params.get(alias, {}).items():
+                        assert param_id in subquery[self.SUBQUERY_PARAMS_KEY], 'Invalid parameter name.'
+                        param_type = subquery[self.SUBQUERY_PARAMS_KEY][param_id]['data_type']
 
-                    validated_parameters[param_id] = self._process_parameter(param_type, param_data)
-                sql = subquery[self.SUBQUERY_STR_KEY].format(**validated_parameters)
-                assert join_fld is not None, 'Member id mapping is required in the subquery'
-            else:
-                if not join_fld:
-                    select_join_fld = 'id'
-                    join_fld = 'member_id'
-                    select_fields.update(
-                        {'join_field': {'alias': join_fld, 'field': select_join_fld, 'category': self.base_table}}
+                        validated_parameters[param_id] = self._process_parameter(param_type, param_data)
+                    sql = subquery[self.SUBQUERY_STR_KEY].format(**validated_parameters)
+                    assert join_fld is not None, 'Member id mapping is required in the subquery'
+                else:
+                    if not join_fld:
+                        select_join_fld = 'id'
+                        join_fld = 'member_id'
+                        select_fields.update(
+                            {'join_field': {'alias': join_fld, 'field': select_join_fld, 'category': self.base_table}}
+                        )
+                    sql = self.generate_sql(
+                        subquery[self.SUBQUERY_STR_KEY], self.base_table, select_fields, alias_params
                     )
-                sql = self.generate_sql(
-                    subquery[self.SUBQUERY_STR_KEY], self.base_table, select_fields, alias_params
-                )
-            result.append('LEFT JOIN ( {sql} ) AS {alias} ON `{join_tbl}`.`{join_fld}` = `{parent_tbl}`.`id`'.format(
-                sql=sql, alias=alias, join_tbl=alias, join_fld=join_fld, parent_tbl=self.base_table
-            ))
+                result.append('LEFT JOIN ( {sql} ) AS {alias} ON `{join_tbl}`.`{join_fld}` = `{parent_tbl}`.`id`'.format(
+                    sql=sql, alias=alias, join_tbl=alias, join_fld=join_fld, parent_tbl=self.base_table
+                ))
         return ' '.join(result)
 
     def generate_select_phrase(self, select_fields=None):
