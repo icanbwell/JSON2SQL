@@ -258,6 +258,9 @@ class JSON2SQLGenerator(object):
             return int(parameter_data['value'])
         elif data_type.upper() == 'STRING':
             return "'{}'".format(self._sql_injection_proof(parameter_data['value']))
+        elif data_type.upper() == 'DATE':
+            (value, ) = self._convert_values([parameter_data['value']], data_type)
+            return value
         else:
             raise AttributeError("Unsupported data type for parameter: {}".format(data_type))
 
