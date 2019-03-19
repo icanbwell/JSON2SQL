@@ -258,6 +258,9 @@ class JSON2SQLGenerator(object):
             return int(parameter_data['value'])
         elif data_type.upper() == 'STRING':
             return "'{}'".format(self._sql_injection_proof(parameter_data['value']))
+        elif data_type.upper() == 'DATE':
+            (value, ) = self._convert_values([parameter_data['value']], data_type)
+            return value
         else:
             raise AttributeError("Unsupported data type for parameter: {}".format(data_type))
 
@@ -631,15 +634,14 @@ class JSON2SQLGenerator(object):
             field_name = subquery_select_field.get('alias')
             # Get alias table name from where data
             table = where.get('alias')
-            field=subquery_select_field.get('field')
+            data_type = subquery_select_field.get('data_type')
         else:
             # Get db field name from field_mapping
             field_name = self.field_mapping[field][self.FIELD_NAME]
             # Get table name from field_mapping
             table = self._get_table_name(field)
-
-        # Get data type from field_mapping
-        data_type = self._get_data_type(field)
+            # Get data type from field_mapping
+            data_type = self._get_data_type(field)
 
         # `value` contains the R.H.S part of the equation.
         # In case of `IS` operator R.H.S can be `NULL` or `NOT NULL`
