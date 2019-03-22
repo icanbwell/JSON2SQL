@@ -487,11 +487,7 @@ class JSON2SQLGenerator(object):
                     assert join_fld is not None, 'Member id mapping is required in the subquery'
                 else:
                     if not join_fld:
-                        select_join_fld = 'id'
                         join_fld = 'member_id'
-                        select_fields.update(
-                            {'join_field': {'alias': join_fld, 'field': select_join_fld, 'category': self.base_table}}
-                        )
                     sql = self.generate_sql(
                         subquery[self.SUBQUERY_STR_KEY], self.base_table, select_fields, alias_params
                     )
