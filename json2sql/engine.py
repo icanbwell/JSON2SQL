@@ -50,12 +50,19 @@ class JSON2SQLGenerator(object):
     # Is operator values
     IS_OPERATOR_VALUE = {'NULL', 'NOT NULL', 'TRUE', 'FALSE'}
 
+    # Like operators
+    STARTS_WITH = 'starts_with'
+    ENDS_WITH = 'ends_with'
+    HAS_SUBSTRING = 'has_substring'
+    LIKE_OPERATORS = (STARTS_WITH, ENDS_WITH, HAS_SUBSTRING, )
+
     # Supported operators
     VALUE_OPERATORS = namedtuple('VALUE_OPRATORS', [
         'equals', 'greater_than', 'less_than',
         'greater_than_equals', 'less_than_equals',
         'not_equals', 'is_op', 'in_op', 'like', 'between',
-        'is_challenge_completed', 'is_challenge_not_completed'
+        'is_challenge_completed', 'is_challenge_not_completed',
+        'starts_with', 'ends_with', 'has_substring', 'verifies_regex'
     ])(
         equals='=',
         greater_than='>',
@@ -68,7 +75,11 @@ class JSON2SQLGenerator(object):
         like='LIKE',
         is_challenge_completed='is_challenge_completed',
         is_challenge_not_completed='is_challenge_not_completed',
-        between=BETWEEN
+        between=BETWEEN,
+        starts_with='LIKE',
+        ends_with='LIKE',
+        has_substring='LIKE',
+        verifies_regex='REGEXP'
     )
 
     DATA_TYPES = namedtuple('DATA_TYPES', [
@@ -524,8 +535,10 @@ class JSON2SQLGenerator(object):
 
                 assert 'alias' in select_field_data, 'Alias name is missing for {select_field} ' \
                                                      'select field in subquery'.format(select_field=select_field)
+                select_field = self._sql_injection_proof(select_field)
+                alias = self._sql_injection_proof(select_field_data['alias'])
                 select_phrase.append('{select_field} AS {alias}'.format(
-                    select_field=select_field, alias=select_field_data['alias']
+                    select_field=select_field, alias=alias
                 ))
             return ', '.join(select_phrase)
         else:
@@ -659,6 +672,16 @@ class JSON2SQLGenerator(object):
                 if secondary_value:
                     secondary_value = self._sql_injection_proof(secondary_value)
 
+                # Update value if operator is in like operators
+                if operator in self.LIKE_OPERATORS:
+                    if operator == self.STARTS_WITH:
+                        like_value = '{value}%%'
+                    elif operator == self.ENDS_WITH:
+                        like_value = '%%{value}'
+                    else:
+                        like_value = '%%{value}%%'
+                    value = like_value.format(value=value)
+
             # Make value sql proof. For ex: if value is string or data convert it to '<value>'
             sql_value, secondary_sql_value = self._convert_values(
                 [value, secondary_value], data_type
@@ -667,7 +690,7 @@ class JSON2SQLGenerator(object):
         lhs = u'`{table}`.`{field}`'.format(table=table, field=field_name)  # type: unicode
 
         # Apply aggregate function to L.H.S
-        if 'aggregate_lhs' in where:
+        if 'aggregate_lhs' in where and where['aggregate_lhs']:
             aggregate_func_name = where['aggregate_lhs'].upper()  # type: unicode
             if aggregate_func_name in self.ALLOWED_AGGREGATE_FUNCTIONS:
                 lhs = u'{func_name}({field_name})'.format(func_name=aggregate_func_name, field_name=lhs)
@@ -687,7 +710,7 @@ class JSON2SQLGenerator(object):
         if sql_operator == self.BETWEEN:
             where_phrase = u'{lhs} {operator} {primary_value} AND {secondary_value}'.format(
                 lhs=lhs, operator=sql_operator,
-                value=sql_value, secondary_value=secondary_sql_value
+                primary_value=sql_value, secondary_value=secondary_sql_value
             )
         else:
             where_phrase = u'{lhs} {operator} {value}'.format(
