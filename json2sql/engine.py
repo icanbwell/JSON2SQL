@@ -798,7 +798,10 @@ class JSON2SQLGenerator(object):
             try:
                 datetime.datetime.strptime(value, '%Y-%m-%dT%H:%M:%S')
             except ValueError as e:
-                raise e
+                try:
+                    datetime.datetime.strptime(value, '%Y-%m-%d')
+                except ValueError as e:
+                    raise e
 
     def _get_sql_value(self, value, data_type):
         """

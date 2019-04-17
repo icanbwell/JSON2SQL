@@ -1,3 +1,4 @@
 *.pyc
 dist/*
 json2sql.egg-info/*
+.idea/*
