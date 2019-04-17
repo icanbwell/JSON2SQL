@@ -61,7 +61,7 @@ class JSON2SQLGenerator(object):
     DYNAMIC_VALUE_TYPES = (DYNAMIC_DATE, )
 
     # Dynamic Date Units
-    DYNAMIC_DATE_UNITS = {'WEEK', 'MONTH', 'YEAR'}
+    DYNAMIC_DATE_UNITS = {'DAY', 'WEEK', 'MONTH', 'YEAR'}
 
     # Dynamic Date Operators
     DYNAMIC_DATE_OPERATORS = namedtuple('DYNAMIC_DATE_OPERATORS', [
