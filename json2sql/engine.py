@@ -794,7 +794,7 @@ class JSON2SQLGenerator(object):
                 datetime.datetime.strptime(value, '%Y-%m-%d')
             except ValueError as e:
                 raise e
-        elif data_type == self.DATE_TIME:
+        elif data_type == self.DATE_TIME and not isinstance(value, dict):
             try:
                 datetime.datetime.strptime(value, '%Y-%m-%dT%H:%M:%S')
             except ValueError as e:
@@ -837,12 +837,20 @@ class JSON2SQLGenerator(object):
             unit = value['unit']
         except KeyError as e:
             if 'operator' not in value and 'offset' not in value and 'unit' not in value:
-                return {'are_all_keys_absent': True}
+                return {'use_now_only': True}
             else:
                 raise KeyError(
                     'Missing key - [{}] in dynamic date value dict'.format(e.args[0])
                 )
-        return {'are_all_keys_absent': False, 'operator': operator, 'offset': offset, 'unit': unit}
+        else:
+            if not value['offset']:
+                return {'use_now_only': True}
+            else:
+                if not value['unit'] or not value['operator']:
+                    raise ValueError(
+                        'Value for unit and operator is required when offset is given in dynamic date'
+                    )
+        return {'use_now_only': False, 'operator': operator, 'offset': offset, 'unit': unit}
 
     def _generate_dynamic_date(self, value):
         """
@@ -851,15 +859,22 @@ class JSON2SQLGenerator(object):
         :return: sql value for dynamic date
         """
         validated_data = self._get_dynamic_date_validated_data(value)
-        if validated_data.get('are_all_keys_absent'):
+        if validated_data.get('use_now_only'):
             return 'NOW()'
         else:
             sql_operator = getattr(self.DYNAMIC_DATE_OPERATORS, validated_data.get('operator'))
             unit = self._sql_injection_proof(validated_data.get('unit')).upper()
+            offset = validated_data.get('offset')
+            try:
+                offset = int(offset)
+            except ValueError:
+                raise ValueError(
+                    'Invalid value for offset - [{}]'.format(offset)
+                )
             assert unit in self.DYNAMIC_DATE_UNITS, 'Unsupported dynamic date units'
             return '{date_operator}(NOW(), INTERVAL {offset} {unit})'.format(
                 date_operator=sql_operator,
-                offset=validated_data.get('offset'),
+                offset=offset,
                 unit=unit,
             )
 
