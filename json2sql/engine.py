@@ -50,12 +50,34 @@ class JSON2SQLGenerator(object):
     # Is operator values
     IS_OPERATOR_VALUE = {'NULL', 'NOT NULL', 'TRUE', 'FALSE'}
 
+    # Like operators
+    STARTS_WITH = 'starts_with'
+    ENDS_WITH = 'ends_with'
+    HAS_SUBSTRING = 'has_substring'
+    LIKE_OPERATORS = (STARTS_WITH, ENDS_WITH, HAS_SUBSTRING, )
+
+    # Supported dynamic values
+    DYNAMIC_DATE = 'DYNAMIC_DATE'
+    DYNAMIC_VALUE_TYPES = (DYNAMIC_DATE, )
+
+    # Dynamic Date Units
+    DYNAMIC_DATE_UNITS = {'DAY', 'WEEK', 'MONTH', 'YEAR'}
+
+    # Dynamic Date Operators
+    DYNAMIC_DATE_OPERATORS = namedtuple('DYNAMIC_DATE_OPERATORS', [
+        'date_sub', 'date_add'
+    ])(
+        date_sub='DATE_SUB',
+        date_add='DATE_ADD',
+    )
+
     # Supported operators
-    VALUE_OPERATORS = namedtuple('VALUE_OPRATORS', [
+    VALUE_OPERATORS = namedtuple('VALUE_OPERATORS', [
         'equals', 'greater_than', 'less_than',
         'greater_than_equals', 'less_than_equals',
         'not_equals', 'is_op', 'in_op', 'like', 'between',
-        'is_challenge_completed', 'is_challenge_not_completed'
+        'is_challenge_completed', 'is_challenge_not_completed',
+        'starts_with', 'ends_with', 'has_substring', 'verifies_regex'
     ])(
         equals='=',
         greater_than='>',
@@ -68,7 +90,11 @@ class JSON2SQLGenerator(object):
         like='LIKE',
         is_challenge_completed='is_challenge_completed',
         is_challenge_not_completed='is_challenge_not_completed',
-        between=BETWEEN
+        between=BETWEEN,
+        starts_with='LIKE',
+        ends_with='LIKE',
+        has_substring='LIKE',
+        verifies_regex='REGEXP'
     )
 
     DATA_TYPES = namedtuple('DATA_TYPES', [
@@ -112,10 +138,12 @@ class JSON2SQLGenerator(object):
     def __init__(self, data):
         """
         Initialise basic params.
-        :type custom_methods: (tuple) tuple of tuples containing (id, sql_template, variables)
-        :param field_mapping: (tuple) tuple of tuples containing (field_identifier, field_name, table_name).
-        :param paths: (tuple) tuple of tuples containing (join_table, join_field, parent_table, parent_field).
-                      Information about paths from a model to reach to a specific model and when to stop.
+        : param data: (dict) dict containing following keys:
+                        custom_methods: (tuple) tuple of tuples containing (id, sql_template, variables)
+                        field_mapping: (tuple) tuple of tuples containing (field_identifier, field_name, table_name).
+                        paths: (tuple) tuple of tuples containing (join_table, join_field, parent_table, parent_field).
+                                Information about paths from a model to reach to a specific model and when to stop.
+                        subqueries: (tuple) tuple of tuples containing (id, is_sql, template, fields, parameters).
         :return: None
         """
 
@@ -138,6 +166,10 @@ class JSON2SQLGenerator(object):
             self.NOT_CONDITION: '_parse_not',
             self.EXISTS_CONDITION: '_parse_exists',
             self.CUSTOM_METHOD_CONDITION: '_parse_custom_method_condition',
+        }
+
+        self.DYNAMIC_VALUE_MAPPING = {
+            self.DYNAMIC_DATE: '_generate_dynamic_date',
         }
 
     def _validate_custom_methods(self, sql_templates):
@@ -524,8 +556,10 @@ class JSON2SQLGenerator(object):
 
                 assert 'alias' in select_field_data, 'Alias name is missing for {select_field} ' \
                                                      'select field in subquery'.format(select_field=select_field)
+                select_field = self._sql_injection_proof(select_field)
+                alias = self._sql_injection_proof(select_field_data['alias'])
                 select_phrase.append('{select_field} AS {alias}'.format(
-                    select_field=select_field, alias=select_field_data['alias']
+                    select_field=select_field, alias=alias
                 ))
             return ', '.join(select_phrase)
         else:
@@ -659,15 +693,23 @@ class JSON2SQLGenerator(object):
                 if secondary_value:
                     secondary_value = self._sql_injection_proof(secondary_value)
 
-            # Make value sql proof. For ex: if value is string or data convert it to '<value>'
-            sql_value, secondary_sql_value = self._convert_values(
-                [value, secondary_value], data_type
-            )
+                # Update value if operator is in like operators
+                if operator in self.LIKE_OPERATORS:
+                    if operator == self.STARTS_WITH:
+                        like_value = '{value}%%'
+                    elif operator == self.ENDS_WITH:
+                        like_value = '%%{value}'
+                    else:
+                        like_value = '%%{value}%%'
+                    value = like_value.format(value=value)
+
+            sql_value = self._get_sql_value(value, data_type)
+            secondary_sql_value = self._get_sql_value(secondary_value, data_type)
 
         lhs = u'`{table}`.`{field}`'.format(table=table, field=field_name)  # type: unicode
 
         # Apply aggregate function to L.H.S
-        if 'aggregate_lhs' in where:
+        if 'aggregate_lhs' in where and where['aggregate_lhs']:
             aggregate_func_name = where['aggregate_lhs'].upper()  # type: unicode
             if aggregate_func_name in self.ALLOWED_AGGREGATE_FUNCTIONS:
                 lhs = u'{func_name}({field_name})'.format(func_name=aggregate_func_name, field_name=lhs)
@@ -687,7 +729,7 @@ class JSON2SQLGenerator(object):
         if sql_operator == self.BETWEEN:
             where_phrase = u'{lhs} {operator} {primary_value} AND {secondary_value}'.format(
                 lhs=lhs, operator=sql_operator,
-                value=sql_value, secondary_value=secondary_sql_value
+                primary_value=sql_value, secondary_value=secondary_sql_value
             )
         else:
             where_phrase = u'{lhs} {operator} {value}'.format(
@@ -747,16 +789,94 @@ class JSON2SQLGenerator(object):
                         value, data_type
                     )
                 )
-        elif data_type == self.DATE:
+        elif data_type == self.DATE and not isinstance(value, dict):
             try:
                 datetime.datetime.strptime(value, '%Y-%m-%d')
             except ValueError as e:
                 raise e
-        elif data_type == self.DATE_TIME:
+        elif data_type == self.DATE_TIME and not isinstance(value, dict):
             try:
                 datetime.datetime.strptime(value, '%Y-%m-%dT%H:%M:%S')
             except ValueError as e:
-                raise e
+                try:
+                    datetime.datetime.strptime(value, '%Y-%m-%d')
+                except ValueError as e:
+                    raise e
+
+    def _get_sql_value(self, value, data_type):
+        """
+        Get sql value from the given value
+        :param value: (dict|string) Value for which sql condition is to be generated
+        :param data_type: (string) Data type of the values provided
+        :return: (string) sql value to used
+        """
+        if isinstance(value, dict):
+            try:
+                value_type = value['type'].upper()
+            except KeyError as e:
+                raise KeyError(
+                    'Missing key - [{}] in value dict'.format(e.args[0])
+                )
+            assert value_type in self.DYNAMIC_VALUE_TYPES, 'Invalid dynamic value type'
+            function = getattr(self, self.DYNAMIC_VALUE_MAPPING.get(value_type))
+            sql_value = function(value)
+        else:
+            # Make value sql proof. For ex: if value is string or data convert it to '<value>'
+            (sql_value,) = self._convert_values([value], data_type)
+        return sql_value
+
+    def _get_dynamic_date_validated_data(self, value):
+        """
+        Validate dynamic date data
+        :param value: (dict) Value to be validated
+        :return: Validated data
+        """
+        try:
+            operator = value['operator'].lower()
+            offset = value['offset']
+            unit = value['unit']
+        except KeyError as e:
+            if 'operator' not in value and 'offset' not in value and 'unit' not in value:
+                return {'use_now_only': True}
+            else:
+                raise KeyError(
+                    'Missing key - [{}] in dynamic date value dict'.format(e.args[0])
+                )
+        else:
+            if not value['offset']:
+                return {'use_now_only': True}
+            else:
+                if not value['unit'] or not value['operator']:
+                    raise ValueError(
+                        'Value for unit and operator is required when offset is given in dynamic date'
+                    )
+        return {'use_now_only': False, 'operator': operator, 'offset': offset, 'unit': unit}
+
+    def _generate_dynamic_date(self, value):
+        """
+        Generate dynamic date sql condition
+        :param value: (dict) Value for which dynamic date has to be generated
+        :return: sql value for dynamic date
+        """
+        validated_data = self._get_dynamic_date_validated_data(value)
+        if validated_data.get('use_now_only'):
+            return 'NOW()'
+        else:
+            sql_operator = getattr(self.DYNAMIC_DATE_OPERATORS, validated_data.get('operator'))
+            unit = self._sql_injection_proof(validated_data.get('unit')).upper()
+            offset = validated_data.get('offset')
+            try:
+                offset = int(offset)
+            except ValueError:
+                raise ValueError(
+                    'Invalid value for offset - [{}]'.format(offset)
+                )
+            assert unit in self.DYNAMIC_DATE_UNITS, 'Unsupported dynamic date units'
+            return '{date_operator}(NOW(), INTERVAL {offset} {unit})'.format(
+                date_operator=sql_operator,
+                offset=offset,
+                unit=unit,
+            )
 
     def _parse_and(self, data):
         """
