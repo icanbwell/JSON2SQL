@@ -309,7 +309,7 @@ class JSON2SQLGenerator(object):
             alias_params[alias] = subquery.get('parameters', {})
         return alias_params
 
-    def generate_sql(self, data, base_table, select_fields=None, alias_params=None):
+    def generate_sql(self, data, base_table, **kwargs):
         """
         Create SQL query from provided json
         :param data: (dict) Actual JSON containing nested condition data.
@@ -318,9 +318,13 @@ class JSON2SQLGenerator(object):
         :param select_fields: (dict) JSON containing select fields
         :return: (unicode) Finalized SQL query unicode
         """
+
         self.base_table = base_table
         assert self.validate_where_data(data.get('where_data', {})), 'Invalid where data'
         where_phrase = self._generate_sql_condition(data['where_data'])
+
+        if 'additional_where_clause' in kwargs:
+            where_phrase = where_phrase + kwargs['additional_where_clause']
 
         if 'group_by_fields' in data:
             assert isinstance(data['group_by_fields'], list), 'Group by fields need to list of dict'
@@ -334,10 +338,10 @@ class JSON2SQLGenerator(object):
         join_phrase = self.generate_left_join(join_tables)
         group_by_phrase = self.generate_group_by(data.get('group_by_fields', []),
                                                  data.get('having', {}))
-        if alias_params is None:
+        if 'alias_params' not in kwargs :
             alias_params = self._generate_alias_params(data.get('sub_queries', []))
-        sub_query_phrase = self.generate_subquery(data.get('sub_queries', []), alias_params)
-        select_phrase = self.generate_select_phrase(select_fields)
+        sub_query_phrase = self.generate_subquery(data.get('sub_queries', []), kwargs.get('alias_params', alias_params))
+        select_phrase = self.generate_select_phrase(kwargs.get('select_fields', None))
 
         return u'SELECT {select_phrase} FROM {base_table} {sub_query_phrase} {join_phrase}' \
                u' WHERE {where_phrase} {group_by_fragment}'.format(
@@ -521,7 +525,8 @@ class JSON2SQLGenerator(object):
                     if not join_fld:
                         join_fld = 'member_id'
                     sql = self.generate_sql(
-                        subquery[self.SUBQUERY_STR_KEY], self.base_table, select_fields, alias_params
+                        subquery[self.SUBQUERY_STR_KEY], self.base_table,
+                        **{'select_fields': select_fields, 'alias_params': alias_params}
                     )
                 result.append('LEFT JOIN ( {sql} ) AS {alias} ON `{join_tbl}`.`{join_fld}` = `{parent_tbl}`.`id`'.format(
                     sql=sql, alias=alias, join_tbl=alias, join_fld=join_fld, parent_tbl=self.base_table
