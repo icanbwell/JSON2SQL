@@ -338,6 +338,7 @@ class JSON2SQLGenerator(object):
         join_phrase = self.generate_left_join(join_tables)
         group_by_phrase = self.generate_group_by(data.get('group_by_fields', []),
                                                  data.get('having', {}))
+        alias_params = None
         if 'alias_params' not in kwargs :
             alias_params = self._generate_alias_params(data.get('sub_queries', []))
         sub_query_phrase = self.generate_subquery(data.get('sub_queries', []), kwargs.get('alias_params', alias_params))
