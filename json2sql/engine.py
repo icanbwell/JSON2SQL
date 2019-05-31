@@ -686,8 +686,9 @@ class JSON2SQLGenerator(object):
         # Hence we want to skip data type check for `IS` operator.
         if sql_operator == self.VALUE_OPERATORS.is_op:
             if data_type == self.STRING:
-                assert value.upper() in self.IS_OPERATOR_VALUES_FOR_STRING, 'Invalid rhs for `IS` operator'
-                sql_operator = self.VALUE_OPERATORS.not_equals if 'NOT' in value.upper() else self.VALUE_OPERATORS.equals
+                value_in_upper_case = value.upper()
+                assert value_in_upper_case in self.IS_OPERATOR_VALUES_FOR_STRING, 'Invalid rhs for `IS` operator'
+                sql_operator = self.VALUE_OPERATORS.not_equals if 'NOT' in value_in_upper_case else self.VALUE_OPERATORS.equals
                 value = "''"
             else:
                 assert value.upper() in self.IS_OPERATOR_VALUE, 'Invalid rhs for `IS` operator'
