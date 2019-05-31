@@ -48,6 +48,7 @@ class JSON2SQLGenerator(object):
     ALLOWED_CUSTOM_METHOD_PARAM_TYPES = {'field', 'integer', 'string', 'date'}
 
     # Is operator values
+    IS_OPERATOR_VALUES_FOR_STRING = {"''", "NOT ''"}
     IS_OPERATOR_VALUE = {'NULL', 'NOT NULL', 'TRUE', 'FALSE'}
 
     # Like operators
@@ -684,7 +685,15 @@ class JSON2SQLGenerator(object):
         # irrespective of data type of the L.H.S.
         # Hence we want to skip data type check for `IS` operator.
         if sql_operator == self.VALUE_OPERATORS.is_op:
-            assert value.upper() in self.IS_OPERATOR_VALUE, 'Invalid rhs for `IS` operator'
+            if data_type == self.STRING:
+                assert value.upper() in self.IS_OPERATOR_VALUES_FOR_STRING, 'Invalid rhs for `IS` operator'
+                if 'NOT' in value.upper():
+                    value = "''"
+                    sql_operator = self.VALUE_OPERATORS.not_equals
+                else:
+                    sql_operator = self.VALUE_OPERATORS.equals
+            else:
+                assert value.upper() in self.IS_OPERATOR_VALUE, 'Invalid rhs for `IS` operator'
             sql_value, secondary_sql_value = value.upper(), None
         else:
             # Check if the primary value and data_type are in sync
