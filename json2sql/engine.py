@@ -261,7 +261,7 @@ class JSON2SQLGenerator(object):
         """
         Converts tuple of tuples to dict.
         :param variable_templates: (tuple) tuple of tuples containing (unique_id, keyword, return_type)
-        :return: (dict) { unique_id: { variable_template_keyword:, variable_template_return_type: }
+        :return: (dict) { unique_id: { variable_template_keyword:<value>, variable_template_return_type:<value> }
         """
         return {
             str(unique_id): {
@@ -726,21 +726,21 @@ class JSON2SQLGenerator(object):
             if data_type == self.STRING:
                 if not isinstance(value, dict):
                     value = self._sql_injection_proof(value)
-                    if secondary_value:
-                        secondary_value = self._sql_injection_proof(secondary_value)
-
-                # Update value if operator is in like operators
-                if operator in self.LIKE_OPERATORS:
-                    if operator == self.STARTS_WITH:
-                        like_value = '{value}%%'
-                    elif operator == self.ENDS_WITH:
-                        like_value = '%%{value}'
-                    else:
-                        like_value = '%%{value}%%'
-                    value = like_value.format(value=value)
+                if secondary_value and not isinstance(secondary_value, dict):
+                    secondary_value = self._sql_injection_proof(secondary_value)
 
             sql_value = self._get_sql_value(value, data_type)
             secondary_sql_value = self._get_sql_value(secondary_value, data_type)
+
+            # Update value if operator is in like operators
+            if data_type == self.STRING and operator in self.LIKE_OPERATORS:
+                if operator == self.STARTS_WITH:
+                    like_value = '{value}%%'
+                elif operator == self.ENDS_WITH:
+                    like_value = '%%{value}'
+                else:
+                    like_value = '%%{value}%%'
+                sql_value = like_value.format(value=sql_value)
 
         lhs = u'`{table}`.`{field}`'.format(table=table, field=field_name)  # type: unicode
 
