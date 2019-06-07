@@ -59,7 +59,8 @@ class JSON2SQLGenerator(object):
 
     # Supported dynamic values
     DYNAMIC_DATE = 'DYNAMIC_DATE'
-    DYNAMIC_VALUE_TYPES = (DYNAMIC_DATE, )
+    VARIABLE_TEMPLATE='VARIABLE_TEMPLATE'
+    DYNAMIC_VALUE_TYPES = (DYNAMIC_DATE, VARIABLE_TEMPLATE, )
 
     # Dynamic Date Units
     DYNAMIC_DATE_UNITS = {'DAY', 'WEEK', 'MONTH', 'YEAR'}
@@ -136,6 +137,10 @@ class JSON2SQLGenerator(object):
     SUBQUERY_FIELDS_KEY = 'subquery_fields'
     SUBQUERY_IS_SQL = 'subquery_is_sql'
 
+    # - Used in variable templates mapping -
+    VARIABLE_TEMPLATE_KEYWORD = 'variable_template_keyword'
+    VARIABLE_TEMPLATE_RETURN_TYPE = 'variable_template_return_type'
+
     def __init__(self, data):
         """
         Initialise basic params.
@@ -152,12 +157,14 @@ class JSON2SQLGenerator(object):
         assert 'paths' in data, 'Paths key is required in data when initializing params'
         assert 'custom_methods' in data, 'Custom Methods key is required in data when initializing params'
         assert 'subqueries' in data, 'Subqueries key is required in data when initializing params'
+        assert 'variable_templates' in data, 'Variable Templates key is required in data when initializing params'
 
         self.base_table = ''
         self.field_mapping = self._parse_field_mapping(data.get('field_mapping'))
         self.path_mapping = self._parse_multi_path_mapping(data.get('paths'))
         self.custom_methods = self._validate_custom_methods(data.get('custom_methods'))
         self.subquery_mapping = self._parse_subquery_mapping(data.get('subqueries'))
+        self.variable_templates = self._parse_variable_templates(data.get('variable_templates'))
 
         # Mapping to be used to parse various combination keywords data
         self.WHERE_CONDITION_MAPPING = {
@@ -171,6 +178,7 @@ class JSON2SQLGenerator(object):
 
         self.DYNAMIC_VALUE_MAPPING = {
             self.DYNAMIC_DATE: '_generate_dynamic_date',
+            self.VARIABLE_TEMPLATE: '_generate_variable_template'
         }
 
     def _validate_custom_methods(self, sql_templates):
@@ -248,6 +256,19 @@ class JSON2SQLGenerator(object):
                 self.SUBQUERY_IS_SQL: is_sql
             }
         return subquery_mapping
+
+    def _parse_variable_templates(self, variable_templates):
+        """
+        Converts tuple of tuples to dict.
+        :param variable_templates: (tuple) tuple of tuples containing (unique_id, keyword, return_type)
+        :return: (dict) { unique_id: { variable_template_keyword:<value>, variable_template_return_type:<value> }
+        """
+        return {
+            str(unique_id): {
+                self.VARIABLE_TEMPLATE_KEYWORD: keyword,
+                self.VARIABLE_TEMPLATE_RETURN_TYPE: return_type,
+            } for unique_id, keyword, return_type in variable_templates
+        }
 
     def _parse_custom_method_condition(self, data):
         """
@@ -694,30 +715,32 @@ class JSON2SQLGenerator(object):
                 assert value_in_upper_case in self.IS_OPERATOR_VALUE, 'Invalid rhs for `IS` operator'
             sql_value, secondary_sql_value = value_in_upper_case, None
         else:
-            # Check if the primary value and data_type are in sync
-            self._sanitize_value(value, data_type)
-            # Check if the secondary_value and data_type are in sync
-            if secondary_value:
-                self._sanitize_value(secondary_value, data_type)
+            if not isinstance(value, dict):
+                # Check if the primary value and data_type are in sync
+                self._sanitize_value(value, data_type)
+                # Check if the secondary_value and data_type are in sync
+                if secondary_value:
+                    self._sanitize_value(secondary_value, data_type)
 
             # Make string SQL injection proof
             if data_type == self.STRING:
-                value = self._sql_injection_proof(value)
-                if secondary_value:
+                if not isinstance(value, dict):
+                    value = self._sql_injection_proof(value)
+                if secondary_value and not isinstance(secondary_value, dict):
                     secondary_value = self._sql_injection_proof(secondary_value)
-
-                # Update value if operator is in like operators
-                if operator in self.LIKE_OPERATORS:
-                    if operator == self.STARTS_WITH:
-                        like_value = '{value}%%'
-                    elif operator == self.ENDS_WITH:
-                        like_value = '%%{value}'
-                    else:
-                        like_value = '%%{value}%%'
-                    value = like_value.format(value=value)
 
             sql_value = self._get_sql_value(value, data_type)
             secondary_sql_value = self._get_sql_value(secondary_value, data_type)
+
+            # Update value if operator is in like operators
+            if data_type == self.STRING and operator in self.LIKE_OPERATORS:
+                if operator == self.STARTS_WITH:
+                    like_value = '{value}%%'
+                elif operator == self.ENDS_WITH:
+                    like_value = '%%{value}'
+                else:
+                    like_value = '%%{value}%%'
+                sql_value = like_value.format(value=sql_value)
 
         lhs = u'`{table}`.`{field}`'.format(table=table, field=field_name)  # type: unicode
 
@@ -802,12 +825,12 @@ class JSON2SQLGenerator(object):
                         value, data_type
                     )
                 )
-        elif data_type == self.DATE and not isinstance(value, dict):
+        elif data_type == self.DATE:
             try:
                 datetime.datetime.strptime(value, '%Y-%m-%d')
             except ValueError as e:
                 raise e
-        elif data_type == self.DATE_TIME and not isinstance(value, dict):
+        elif data_type == self.DATE_TIME:
             try:
                 datetime.datetime.strptime(value, '%Y-%m-%dT%H:%M:%S')
             except ValueError as e:
@@ -832,7 +855,7 @@ class JSON2SQLGenerator(object):
                 )
             assert value_type in self.DYNAMIC_VALUE_TYPES, 'Invalid dynamic value type'
             function = getattr(self, self.DYNAMIC_VALUE_MAPPING.get(value_type))
-            sql_value = function(value)
+            sql_value = function(value, data_type)
         else:
             # Make value sql proof. For ex: if value is string or data convert it to '<value>'
             (sql_value,) = self._convert_values([value], data_type)
@@ -865,10 +888,11 @@ class JSON2SQLGenerator(object):
                     )
         return {'use_now_only': False, 'operator': operator, 'offset': offset, 'unit': unit}
 
-    def _generate_dynamic_date(self, value):
+    def _generate_dynamic_date(self, value, data_type):
         """
         Generate dynamic date sql condition
         :param value: (dict) Value for which dynamic date has to be generated
+        :param data_type: (string) Data type of the field for which dynamic date is used
         :return: sql value for dynamic date
         """
         validated_data = self._get_dynamic_date_validated_data(value)
@@ -890,6 +914,26 @@ class JSON2SQLGenerator(object):
                 offset=offset,
                 unit=unit,
             )
+
+    def _generate_variable_template(self, value, data_type):
+        """
+        Generate variable template sql condition
+        :param value: (dict) Value for which variable template keyword needs to be generated
+        :param data_type: (String) Data type of the field for which variable template is used
+        :return: sql value for variable template keyword
+        """
+        variable_template_id = value.get('variable_template_id')
+
+        # Raise error if variable_template_id key is missing
+        if not variable_template_id:
+            raise ValueError('Missing key - [variable_template_id]')
+
+        template_data = self.variable_templates[variable_template_id]
+        variable_template_keyword = template_data[self.VARIABLE_TEMPLATE_KEYWORD]
+        # Check if data type of field is equal to the return type of variable template
+        assert template_data[self.VARIABLE_TEMPLATE_RETURN_TYPE] == data_type, \
+            'Data type of field does not match return type of {} variable template'.format(variable_template_keyword)
+        return '{{{keyword}}}'.format(keyword=variable_template_keyword)
 
     def _parse_and(self, data):
         """
