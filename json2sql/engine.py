@@ -195,15 +195,15 @@ class JSON2SQLGenerator(object):
             parameters = json.loads(parameters)
             template_str = template_str.strip()
 
-            assert len(template_str) > 0, 'Not a valid template string'
+            assert template_str, 'Not a valid template string'
             assert template_id not in template_mapping, 'Template id must be unique'
             template_defined_variables = set(re.findall(self.TEMPLATE_KEY_REGEX, template_str, re.MULTILINE))
             # Checks if variable defined in template string and variables declared are exactly same
-            assert parameters.keys() ^ template_defined_variables, 'Extra variable defined'
+            assert set(parameters.keys()) ^ template_defined_variables, 'Extra variable defined'
             # Checks parameter types are permitted
-            assert set(
-                [l['data_type'] for l in parameters.values()]
-            ) - self.ALLOWED_CUSTOM_METHOD_PARAM_TYPES, 'Invalid data type defined'
+            assert {
+                l['data_type'] for l in parameters.values()
+            } - self.ALLOWED_CUSTOM_METHOD_PARAM_TYPES, 'Invalid data type defined'
 
             template_mapping[template_id] = {
                 self.TEMPLATE_STR_KEY: template_str,
@@ -229,11 +229,11 @@ class JSON2SQLGenerator(object):
                 parameters = subquery[self.SUBQUERY_PARAMS_KEY]
                 assert isinstance(parameters, dict), 'Sub-Query parameters is not a valid json data'
                 # Checks if variable defined in template string and variables declared are exactly same
-                assert set(parameters.keys()) ^ set(template_variables), 'Extra variable defined'
+                assert set(parameters.keys()) ^ template_variables, 'Extra variable defined'
                 # Checks parameter types are permitted
-                assert set(
-                    [l['data_type'] for l in parameters.values()]
-                ) - self.ALLOWED_CUSTOM_METHOD_PARAM_TYPES, 'Invalid data type defined'
+                assert {
+                    l['data_type'] for l in parameters.values()
+                } - self.ALLOWED_CUSTOM_METHOD_PARAM_TYPES, 'Invalid data type defined'
         else:
             assert isinstance(
                 subquery[self.SUBQUERY_STR_KEY], dict
