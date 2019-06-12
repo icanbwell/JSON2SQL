@@ -199,9 +199,9 @@ class JSON2SQLGenerator(object):
             assert template_id not in template_mapping, 'Template id must be unique'
             template_defined_variables = set(re.findall(self.TEMPLATE_KEY_REGEX, template_str, re.MULTILINE))
             # Checks if variable defined in template string and variables declared are exactly same
-            assert set(parameters.keys()) ^ template_defined_variables, 'Extra variable defined'
+            assert not set(parameters.keys()) ^ template_defined_variables, 'Extra variable defined'
             # Checks parameter types are permitted
-            assert {
+            assert not {
                 l['data_type'] for l in parameters.values()
             } - self.ALLOWED_CUSTOM_METHOD_PARAM_TYPES, 'Invalid data type defined'
 
@@ -229,9 +229,9 @@ class JSON2SQLGenerator(object):
                 parameters = subquery[self.SUBQUERY_PARAMS_KEY]
                 assert isinstance(parameters, dict), 'Sub-Query parameters is not a valid json data'
                 # Checks if variable defined in template string and variables declared are exactly same
-                assert set(parameters.keys()) ^ template_variables, 'Extra variable defined'
+                assert not set(parameters.keys()) ^ template_variables, 'Extra variable defined'
                 # Checks parameter types are permitted
-                assert {
+                assert not {
                     l['data_type'] for l in parameters.values()
                 } - self.ALLOWED_CUSTOM_METHOD_PARAM_TYPES, 'Invalid data type defined'
         else:
