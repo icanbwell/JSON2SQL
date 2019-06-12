@@ -59,7 +59,7 @@ class JSON2SQLGenerator(object):
 
     # Supported dynamic values
     DYNAMIC_DATE = 'DYNAMIC_DATE'
-    VARIABLE_TEMPLATE='VARIABLE_TEMPLATE'
+    VARIABLE_TEMPLATE = 'VARIABLE_TEMPLATE'
     DYNAMIC_VALUE_TYPES = (DYNAMIC_DATE, VARIABLE_TEMPLATE, )
 
     # Dynamic Date Units
@@ -199,10 +199,11 @@ class JSON2SQLGenerator(object):
             assert template_id not in template_mapping, 'Template id must be unique'
             template_defined_variables = set(re.findall(self.TEMPLATE_KEY_REGEX, template_str, re.MULTILINE))
             # Checks if variable defined in template string and variables declared are exactly same
-            assert len(set(parameters.keys()) ^ template_defined_variables) == 0, 'Extra variable defined'
+            assert parameters.keys() ^ template_defined_variables, 'Extra variable defined'
             # Checks parameter types are permitted
-            assert len(set(map(lambda l: l['data_type'], parameters.values()))
-                       - self.ALLOWED_CUSTOM_METHOD_PARAM_TYPES) == 0, 'Invalid data type defined'
+            assert set(
+                [l['data_type'] for l in parameters.values()]
+            ) - self.ALLOWED_CUSTOM_METHOD_PARAM_TYPES, 'Invalid data type defined'
 
             template_mapping[template_id] = {
                 self.TEMPLATE_STR_KEY: template_str,
@@ -217,20 +218,26 @@ class JSON2SQLGenerator(object):
         :param subquery: (dict) Sub-Query dict containing (id, template, fields, parameters, is_sql)
         :return:
         """
-        assert isinstance(subquery[self.SUBQUERY_FIELDS_KEY], dict), 'Sub-Query fields is not a valid json data'
+        assert isinstance(
+            subquery[self.SUBQUERY_FIELDS_KEY], dict
+        ), 'Sub-Query fields is not a valid json data'
         if subquery[self.SUBQUERY_IS_SQL]:
-            template_variables = set(re.findall(self.TEMPLATE_KEY_REGEX, subquery[self.SUBQUERY_STR_KEY], re.MULTILINE))
-            if len(set(template_variables)):
+            template_variables = set(
+                re.findall(self.TEMPLATE_KEY_REGEX, subquery[self.SUBQUERY_STR_KEY], re.MULTILINE)
+            )
+            if template_variables:
                 parameters = subquery[self.SUBQUERY_PARAMS_KEY]
                 assert isinstance(parameters, dict), 'Sub-Query parameters is not a valid json data'
                 # Checks if variable defined in template string and variables declared are exactly same
-                assert len(set(parameters.keys()) ^ set(template_variables)) == 0, 'Extra variable defined'
+                assert set(parameters.keys()) ^ set(template_variables), 'Extra variable defined'
                 # Checks parameter types are permitted
-                assert len(set(map(lambda l: l['data_type'], parameters.values()))
-                           - self.ALLOWED_CUSTOM_METHOD_PARAM_TYPES) == 0, 'Invalid data type defined'
-
+                assert set(
+                    [l['data_type'] for l in parameters.values()]
+                ) - self.ALLOWED_CUSTOM_METHOD_PARAM_TYPES, 'Invalid data type defined'
         else:
-            assert isinstance(subquery[self.SUBQUERY_STR_KEY], dict), 'Sub-Query template is not a valid json data'
+            assert isinstance(
+                subquery[self.SUBQUERY_STR_KEY], dict
+            ), 'Sub-Query template is not a valid json data'
 
     def _parse_subquery_mapping(self, subqueries):
         """
@@ -350,31 +357,35 @@ class JSON2SQLGenerator(object):
 
         if 'group_by_fields' in data:
             assert isinstance(data['group_by_fields'], list), 'Group by fields need to list of dict'
-            data['group_by_fields'] = list(map(lambda x: int(x['field']), data['group_by_fields']))
+            data['group_by_fields'] = [int(x['field']) for x in data['group_by_fields']]
 
-        path_subset = self.extract_paths_subset(list(
-            map(lambda field_id: self.field_mapping[field_id][self.TABLE_NAME], data['fields'])),
+        path_subset = self.extract_paths_subset(
+            [self.field_mapping[field_id][self.TABLE_NAME] for field_id in data['fields']],
             data.get('path_hints', {})
         )
         join_tables = self.create_join_path(path_subset, self.base_table)
         join_phrase = self.generate_left_join(join_tables)
-        group_by_phrase = self.generate_group_by(data.get('group_by_fields', []),
-                                                 data.get('having', {}))
+        group_by_phrase = self.generate_group_by(
+            data.get('group_by_fields', []), data.get('having', {})
+        )
         alias_params = None
-        if 'alias_params' not in kwargs :
+        if 'alias_params' not in kwargs:
             alias_params = self._generate_alias_params(data.get('sub_queries', []))
-        sub_query_phrase = self.generate_subquery(data.get('sub_queries', []), kwargs.get('alias_params', alias_params))
+        sub_query_phrase = self.generate_subquery(
+            data.get('sub_queries', []), kwargs.get('alias_params', alias_params)
+        )
         select_phrase = self.generate_select_phrase(kwargs.get('select_fields', None))
 
         return u'SELECT {select_phrase} FROM {base_table} {sub_query_phrase} {join_phrase}' \
                u' WHERE {where_phrase} {group_by_fragment}'.format(
-                    join_phrase=join_phrase,
-                    base_table=base_table,
-                    where_phrase=where_phrase,
-                    group_by_fragment=group_by_phrase,
-                    select_phrase=select_phrase,
-                    sub_query_phrase=sub_query_phrase
-                )
+                   join_phrase=join_phrase,
+                   base_table=base_table,
+                   where_phrase=where_phrase,
+                   group_by_fragment=group_by_phrase,
+                   select_phrase=select_phrase,
+                   sub_query_phrase=sub_query_phrase
+
+               )
 
     def _parse_multi_path_mapping(self, paths):
         """
@@ -424,7 +435,7 @@ class JSON2SQLGenerator(object):
         traversal_nodes = list(start_nodes)  # type: list
 
         # We would be doing traversal from given tables towards base tables.
-        while len(traversal_nodes) > 0:
+        while traversal_nodes:
             curr_node = traversal_nodes.pop()  # type: str
 
             # This condition indicate that we have reached end of path
@@ -466,7 +477,7 @@ class JSON2SQLGenerator(object):
 
         for table_name in sorted(path_map[curr_table]):
             yield (table_name, curr_table)
-            for item in (self.create_join_path(path_map, table_name)):
+            for item in self.create_join_path(path_map, table_name):
                 yield item
 
     def generate_left_join(self, join_path):
@@ -496,20 +507,20 @@ class JSON2SQLGenerator(object):
 
         assert self.validate_group_by_data(group_by_fields, having_clause), 'Invalid having data'
 
-        if len(group_by_fields) == 0:
+        if not group_by_fields:
             return ''
 
         result = ''
-        fully_qualified_field_names = map(
-            lambda field_id: '`{table_name}`.`{field_name}`'.format(
+        fully_qualified_field_names = [
+            '`{table_name}`.`{field_name}`'.format(
                 table_name=self.field_mapping[field_id][self.TABLE_NAME],
                 field_name=self.field_mapping[field_id][self.FIELD_NAME]
-            ),
-            group_by_fields
-        )
+            )
+            for field_id in group_by_fields
+        ]
 
         result += 'GROUP BY {fields}'.format(fields=', '.join(fully_qualified_field_names))
-        if len(having_clause.keys()) > 0:
+        if having_clause.keys():
             result += ' HAVING {condition}'.format(condition=self._generate_sql_condition(having_clause))
 
         return result
@@ -530,8 +541,9 @@ class JSON2SQLGenerator(object):
                 select_fields = subquery[self.SUBQUERY_FIELDS_KEY]
                 join_fld = None
                 for select_field_id, select_field_data in select_fields.items():
-                    if 'is_member_id' in select_field_data and select_field_data.get('is_member_id'):
-                        assert 'alias' in select_field_data, 'Alias is required for {} field'.format(select_field_id)
+                    if select_field_data.get('is_member_id', None):
+                        assert('alias' in select_field_data, 
+                        'Alias is required for {} field'.format(select_field_id))
                         join_fld = select_field_data.get('alias')
 
                 if subquery[self.SUBQUERY_IS_SQL]:
@@ -551,9 +563,11 @@ class JSON2SQLGenerator(object):
                         subquery[self.SUBQUERY_STR_KEY], self.base_table,
                         **{'select_fields': select_fields, 'alias_params': alias_params}
                     )
-                result.append('LEFT JOIN ( {sql} ) AS {alias} ON `{join_tbl}`.`{join_fld}` = `{parent_tbl}`.`id`'.format(
-                    sql=sql, alias=alias, join_tbl=alias, join_fld=join_fld, parent_tbl=self.base_table
-                ))
+                result.append(
+                    'LEFT JOIN ( {sql} ) AS {alias} ON `{join_tbl}`.`{join_fld}` = `{parent_tbl}`.`id`'.format(
+                        sql=sql, alias=alias, join_tbl=alias, join_fld=join_fld, parent_tbl=self.base_table
+                    )
+                )
         return ' '.join(result)
 
     def generate_select_phrase(self, select_fields=None):
@@ -565,7 +579,7 @@ class JSON2SQLGenerator(object):
         if select_fields:
             select_phrase = []
             for select_field_id, select_field_data in select_fields.items():
-                if type(select_field_data['field']) == int:
+                if isinstance(select_field_data['field'], int):
                     field_name = self.field_mapping[select_field_data['field']][self.FIELD_NAME]
                     table = self._get_table_name(select_field_data['field'])
                 else:
@@ -708,8 +722,14 @@ class JSON2SQLGenerator(object):
         if sql_operator == self.VALUE_OPERATORS.is_op:
             value_in_upper_case = value.upper()
             if data_type == self.STRING:
-                assert value_in_upper_case in self.IS_OPERATOR_VALUES_FOR_STRING, 'Invalid rhs for `IS` operator'
-                sql_operator = self.VALUE_OPERATORS.not_equals if 'NOT' in value_in_upper_case else self.VALUE_OPERATORS.equals
+                assert(
+                    value_in_upper_case in self.IS_OPERATOR_VALUES_FOR_STRING,
+                    'Invalid rhs for `IS` operator'
+                )
+                sql_operator = (
+                    self.VALUE_OPERATORS.not_equals if 'NOT' in value_in_upper_case
+                    else self.VALUE_OPERATORS.equals
+                )
                 value = "''"
             else:
                 assert value_in_upper_case in self.IS_OPERATOR_VALUE, 'Invalid rhs for `IS` operator'
@@ -750,14 +770,17 @@ class JSON2SQLGenerator(object):
             if aggregate_func_name in self.ALLOWED_AGGREGATE_FUNCTIONS:
                 lhs = u'{func_name}({field_name})'.format(func_name=aggregate_func_name, field_name=lhs)
             else:
-                logger.info("Unsupported aggregate functions: {}".format(aggregate_func_name))
+                logger.info('Unsupported aggregate functions: %s', aggregate_func_name)
 
         # TODO: Based on the assumption that below operator will only used
         #           with challenge.
         if sql_operator in [self.VALUE_OPERATORS.is_challenge_completed,
                             self.VALUE_OPERATORS.is_challenge_not_completed]:
             return "{negate} {check}".format(
-                negate='NOT' if sql_operator == self.VALUE_OPERATORS.is_challenge_not_completed else '',
+                negate=(
+                    'NOT' if sql_operator == self.VALUE_OPERATORS.is_challenge_not_completed
+                    else ''
+                ),
                 check=self.CHALLENGE_CHECK_QUERY.format(value=sql_value)
             )
 
@@ -931,8 +954,12 @@ class JSON2SQLGenerator(object):
         template_data = self.variable_templates[variable_template_id]
         variable_template_keyword = template_data[self.VARIABLE_TEMPLATE_KEYWORD]
         # Check if data type of field is equal to the return type of variable template
-        assert template_data[self.VARIABLE_TEMPLATE_RETURN_TYPE] == data_type, \
-            'Data type of field does not match return type of {} variable template'.format(variable_template_keyword)
+        assert template_data[self.VARIABLE_TEMPLATE_RETURN_TYPE] == (
+            data_type,
+            'Data type of field does not match return type of {template} variable template'.format(
+                template=variable_template_keyword
+            )
+        )
         return '{{{keyword}}}'.format(keyword=variable_template_keyword)
 
     def _parse_and(self, data):
@@ -1007,9 +1034,9 @@ class JSON2SQLGenerator(object):
         """
         return {
             field[0]: {
-               self.FIELD_NAME: field[1],
-               self.TABLE_NAME: field[2],
-               self.DATA_TYPE: field[3]
+                self.FIELD_NAME: field[1],
+                self.TABLE_NAME: field[2],
+                self.DATA_TYPE: field[3]
             } for field in field_mapping
         }
 
