@@ -713,22 +713,8 @@ class JSON2SQLGenerator(object):
                 value = "''"
             else:
                 assert value_in_upper_case in self.IS_OPERATOR_VALUE, 'Invalid rhs for `IS` operator'
-            sql_value, secondary_sql_value = value_in_upper_case, None
+            sql_value, secondary_sql_value = value, None
         else:
-            if not isinstance(value, dict):
-                # Check if the primary value and data_type are in sync
-                self._sanitize_value(value, data_type)
-                # Check if the secondary_value and data_type are in sync
-                if secondary_value:
-                    self._sanitize_value(secondary_value, data_type)
-
-            # Make string SQL injection proof
-            if data_type == self.STRING:
-                if not isinstance(value, dict):
-                    value = self._sql_injection_proof(value)
-                if secondary_value and not isinstance(secondary_value, dict):
-                    secondary_value = self._sql_injection_proof(secondary_value)
-
             sql_value = self._get_sql_value(value, data_type)
             secondary_sql_value = self._get_sql_value(secondary_value, data_type)
 
@@ -839,6 +825,21 @@ class JSON2SQLGenerator(object):
                 except ValueError as e:
                     raise e
 
+    def _validate_sql_values(self, value, data_type):
+        """
+        Validate value for where condition
+        :param value: (String) Value to be validated
+        :param data_type: (String) Data type of value
+        :return: Validated value
+        """
+        if value and not isinstance(value, dict):
+            # Check if the primary value and data_type are in sync
+            self._sanitize_value(value, data_type)
+            # Make string SQL injection proof
+            if data_type == self.STRING:
+                 value = self._sql_injection_proof(value)
+        return value
+
     def _get_sql_value(self, value, data_type):
         """
         Get sql value from the given value
@@ -846,6 +847,7 @@ class JSON2SQLGenerator(object):
         :param data_type: (string) Data type of the values provided
         :return: (string) sql value to used
         """
+        value = self._validate_sql_values(value, data_type)
         if isinstance(value, dict):
             try:
                 value_type = value['type'].upper()
