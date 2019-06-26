@@ -318,12 +318,14 @@ class JSON2SQLGenerator(object):
         elif data_type.upper() == 'INTEGER':
             return int(parameter_data['value'])
         elif data_type.upper() == 'STRING':
-            return "'{}'".format(self._sql_injection_proof(parameter_data['value']))
+            return "'{value}'".format(value=self._sql_injection_proof(parameter_data['value']))
         elif data_type.upper() == 'DATE':
             (value, ) = self._convert_values([parameter_data['value']], data_type)
             return value
         else:
-            raise AttributeError("Unsupported data type for parameter: {}".format(data_type))
+            raise AttributeError(
+                "Unsupported data type for parameter: {type}".format(type=data_type)
+            )
 
     def _generate_alias_params(self, subqueries):
         """
@@ -384,7 +386,6 @@ class JSON2SQLGenerator(object):
                    group_by_fragment=group_by_phrase,
                    select_phrase=select_phrase,
                    sub_query_phrase=sub_query_phrase
-
                )
 
     def _parse_multi_path_mapping(self, paths):
@@ -449,14 +450,14 @@ class JSON2SQLGenerator(object):
                 assert len(
                     set(self.path_mapping[curr_node]) &
                     (start_nodes | set(path_hints.values()))
-                ) == 1, 'Multiple paths are selected from node {}'.format(curr_node)
+                ) == 1, 'Multiple paths are selected from node {curr_node}'.format(curr_node=curr_node)
                 parent_node = path_hints[curr_node]
                 traversal_nodes.append(parent_node)
             elif len(next_nodes) == 1:
                 parent_node = next_nodes.keys()[0]
                 traversal_nodes.append(parent_node)
             else:
-                raise Exception("No path hint provided for `{}`".format(curr_node))
+                raise Exception("No path hint provided for `{curr_node}`".format(curr_node=curr_node))
 
             path_subset[parent_node].add(curr_node)
 
@@ -541,9 +542,10 @@ class JSON2SQLGenerator(object):
                 select_fields = subquery[self.SUBQUERY_FIELDS_KEY]
                 join_fld = None
                 for select_field_id, select_field_data in select_fields.items():
-                    if select_field_data.get('is_member_id', None):
-                        assert('alias' in select_field_data, 
-                        'Alias is required for {} field'.format(select_field_id))
+                    if select_field_data.get('is_member_id'):
+                        assert 'alias' in select_field_data, 'Alias is required for {id} field'.format(
+                            id=select_field_id
+                        )
                         join_fld = select_field_data.get('alias')
 
                 if subquery[self.SUBQUERY_IS_SQL]:
@@ -621,7 +623,7 @@ class JSON2SQLGenerator(object):
         for cond in self.extract_key_from_nested_dict(having, self.WHERE_CONDITION):
             assert isinstance(cond, dict), 'where condition needs to be dict'
             assert 'aggregate_lhs' in cond or cond.get('field') in group_by_fields, \
-                'Use of non aggregate value or non grouped field: {}'.format(cond)
+                'Use of non aggregate value or non grouped field: {cond}'.format(cond=cond)
 
         return True
 
@@ -636,7 +638,7 @@ class JSON2SQLGenerator(object):
         for cond in self.extract_key_from_nested_dict(where_data, self.WHERE_CONDITION):
             assert isinstance(cond, dict), 'Invalid where condition'
             assert cond.get('aggregate_lhs', '') == '', \
-                'Use of non aggregate value or non grouped field: {}'.format(cond)
+                'Use of non aggregate value or non grouped field: {cond}'.format(cond=cond)
 
         return True
 
@@ -665,7 +667,7 @@ class JSON2SQLGenerator(object):
             field = where['field']
         except KeyError as e:
             raise KeyError(
-                u'Missing key - [{}] in where condition dict'.format(e.args[0])
+                u'Missing key - [{key}] in where condition dict'.format(key=e.args[0])
             )
         else:
             # Get optional secondary value
@@ -673,8 +675,8 @@ class JSON2SQLGenerator(object):
             # Check if secondary_value is present for binary operators
             if operator in self.BINARY_OPERATORS and not secondary_value:
                 raise ValueError(
-                    u'Missing key - [secondary_value] for operator - [{}]'.format(
-                        operator
+                    u'Missing key - [secondary_value] for operator - [{operator}]'.format(
+                        operator=operator
                     )
                 )
             return operator, value, field, secondary_value
@@ -690,8 +692,8 @@ class JSON2SQLGenerator(object):
         # Check data valid
         if not isinstance(where, dict):
             raise ValueError(
-                'Where condition data must be a dict. Found [{}]'.format(
-                    type(where)
+                'Where condition data must be a dict. Found [{where_type}]'.format(
+                    where_type=type(where)
                 )
             )
         # Get all the data elements required and validate them
@@ -844,8 +846,8 @@ class JSON2SQLGenerator(object):
                 int(value)
             except ValueError:
                 raise ValueError(
-                    'Invalid value -[{}] for data_type - [{}]'.format(
-                        value, data_type
+                    'Invalid value -[{value}] for data_type - [{data_type}]'.format(
+                        value=value, data_type=data_type
                     )
                 )
         elif data_type == self.DATE:
@@ -874,7 +876,7 @@ class JSON2SQLGenerator(object):
                 value_type = value['type'].upper()
             except KeyError as e:
                 raise KeyError(
-                    'Missing key - [{}] in value dict'.format(e.args[0])
+                    'Missing key - [{key}] in value dict'.format(key=e.args[0])
                 )
             assert value_type in self.DYNAMIC_VALUE_TYPES, 'Invalid dynamic value type'
             function = getattr(self, self.DYNAMIC_VALUE_MAPPING.get(value_type))
@@ -899,7 +901,7 @@ class JSON2SQLGenerator(object):
                 return {'use_now_only': True}
             else:
                 raise KeyError(
-                    'Missing key - [{}] in dynamic date value dict'.format(e.args[0])
+                    'Missing key - [{key}] in dynamic date value dict'.format(key=e.args[0])
                 )
         else:
             if not value['offset']:
@@ -929,7 +931,7 @@ class JSON2SQLGenerator(object):
                 offset = int(offset)
             except ValueError:
                 raise ValueError(
-                    'Invalid value for offset - [{}]'.format(offset)
+                    'Invalid value for offset - [{key}]'.format(key=offset)
                 )
             assert unit in self.DYNAMIC_DATE_UNITS, 'Unsupported dynamic date units'
             return '{date_operator}(NOW(), INTERVAL {offset} {unit})'.format(
@@ -1021,10 +1023,12 @@ class JSON2SQLGenerator(object):
             result = function(element.get(inner_condition))
             # Append the result to the sql.
             if not sql and condition in [self.AND_CONDITION, self.OR_CONDITION]:
-                sql.extend('({})'.format(result))
+                sql.extend('({result})'.format(result=result))
             else:
-                sql.extend(' {0} ({1})'.format(condition, result))
-        return u'({})'.format(sql.decode('utf8'))
+                sql.extend(' {condition} ({result})'.format(
+                    condition=condition, result=result)
+                )
+        return u'({sql})'.format(sql=sql.decode('utf8'))
 
     def _parse_field_mapping(self, field_mapping):
         """
