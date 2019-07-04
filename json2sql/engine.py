@@ -22,6 +22,7 @@ class JSON2SQLGenerator(object):
     NOT_CONDITION = 'not'
     EXISTS_CONDITION = 'exists'
     CUSTOM_METHOD_CONDITION = 'custom_method'
+    QUESTIONNAIRE_CONDITION = 'questionnaire'
 
     # Supported data types by plugin
     INTEGER = 'integer'
@@ -45,7 +46,7 @@ class JSON2SQLGenerator(object):
     ALLOWED_AGGREGATE_FUNCTIONS = {'MIN', 'MAX', 'COUNT'}
 
     # Custom methods field types
-    ALLOWED_CUSTOM_METHOD_PARAM_TYPES = {'field', 'integer', 'string', 'date'}
+    ALLOWED_CUSTOM_METHOD_PARAM_TYPES = {'field', 'integer', 'string', 'date', 'operator', 'boolean'}
 
     # Is operator values
     IS_OPERATOR_VALUES_FOR_STRING = {'EMPTY', 'NOT EMPTY'}
@@ -174,6 +175,7 @@ class JSON2SQLGenerator(object):
             self.NOT_CONDITION: '_parse_not',
             self.EXISTS_CONDITION: '_parse_exists',
             self.CUSTOM_METHOD_CONDITION: '_parse_custom_method_condition',
+            self.QUESTIONNAIRE_CONDITION: '_parse_custom_method_condition',
         }
 
         self.DYNAMIC_VALUE_MAPPING = {
@@ -308,24 +310,31 @@ class JSON2SQLGenerator(object):
         assert len(data_type) > 0, 'Invalid data type'
         assert isinstance(parameter_data, dict), 'Invalid parameter data format'
 
-        if 'value' in parameter_data:
+        value = parameter_data.get('value')
+        if value:
             self._sanitize_value(parameter_data['value'], data_type.lower())
-        if data_type.upper() == 'FIELD':
-            field_data = self.field_mapping[parameter_data['field']]
-            return "`{table}`.`{field}`".format(
-                table=field_data[self.TABLE_NAME], field=field_data[self.FIELD_NAME]
-            )
-        elif data_type.upper() == 'INTEGER':
-            return int(parameter_data['value'])
-        elif data_type.upper() == 'STRING':
-            return "'{value}'".format(value=self._sql_injection_proof(parameter_data['value']))
-        elif data_type.upper() == 'DATE':
-            (value, ) = self._convert_values([parameter_data['value']], data_type)
-            return value
-        else:
-            raise AttributeError(
-                "Unsupported data type for parameter: {type}".format(type=data_type)
-            )
+            if data_type.upper() == 'FIELD':
+                field_data = self.field_mapping[parameter_data['field']]
+                return "`{table}`.`{field}`".format(
+                    table=field_data[self.TABLE_NAME], field=field_data[self.FIELD_NAME]
+                )
+            elif data_type.upper() == 'INTEGER':
+                return int(value)
+            elif data_type.upper() == 'STRING':
+                return "'{value}'".format(value=self._sql_injection_proof(value))
+            elif data_type.upper() == 'DATE':
+                (value, ) = self._convert_values([value], data_type)
+                return value
+            elif data_type.upper() == 'OPERATOR':
+                return getattr(self.VALUE_OPERATORS, value)
+            elif data_type.upper() == 'BOOLEAN':
+                value = value.upper()
+                assert value in self.IS_OPERATOR_VALUE, 'Invalid value for boolean type'
+                return value
+            else:
+                raise AttributeError(
+                    "Unsupported data type for parameter: {type}".format(type=data_type)
+                )
 
     def _generate_alias_params(self, subqueries):
         """
@@ -376,7 +385,7 @@ class JSON2SQLGenerator(object):
         sub_query_phrase = self.generate_subquery(
             data.get('sub_queries', []), kwargs.get('alias_params', alias_params)
         )
-        select_phrase = self.generate_select_phrase(kwargs.get('select_fields', None))
+        select_phrase = self.generate_select_phrase(kwargs.get('select_fields'))
 
         return u'SELECT {select_phrase} FROM {base_table} {sub_query_phrase} {join_phrase}' \
                u' WHERE {where_phrase} {group_by_fragment}'.format(
