@@ -175,6 +175,8 @@ class JSON2SQLGenerator(object):
             self.NOT_CONDITION: '_parse_not',
             self.EXISTS_CONDITION: '_parse_exists',
             self.CUSTOM_METHOD_CONDITION: '_parse_custom_method_condition',
+            # Mapping questionnaire to custom method condition as we are using custom methods SQL
+            # for supporting questionnaire
             self.QUESTIONNAIRE_CONDITION: '_parse_custom_method_condition',
         }
 
