@@ -152,7 +152,6 @@ class JSON2SQLGenerator(object):
                         subqueries: (tuple) tuple of tuples containing (id, is_sql, template, fields, parameters).
         :return: None
         """
-
         assert 'field_mapping' in data, 'Field mapping key is required in data when initializing params'
         assert 'paths' in data, 'Paths key is required in data when initializing params'
         assert 'custom_methods' in data, 'Custom Methods key is required in data when initializing params'
@@ -191,7 +190,6 @@ class JSON2SQLGenerator(object):
         template_mapping = {}
 
         for template_id, template_str, parameters in sql_templates:
-            template_id = int(template_id)
             parameters = json.loads(parameters)
             template_str = template_str.strip()
 
@@ -248,7 +246,6 @@ class JSON2SQLGenerator(object):
         """
         subquery_mapping = {}
         for subquery_id, is_sql, template_str, fields, parameters in subqueries:
-            subquery_id = int(subquery_id)
             parameters = json.loads(parameters)
             fields = json.loads(fields)
 
@@ -286,7 +283,7 @@ class JSON2SQLGenerator(object):
         """
         assert isinstance(data, dict), 'Input data must be a dict'
         assert 'template_id' in data, 'No template_id is provided'
-        template_id = int(data['template_id'])
+        template_id = data['template_id']
         template_data = self.custom_methods[template_id]
 
         # Process parameters
@@ -359,7 +356,7 @@ class JSON2SQLGenerator(object):
 
         if 'group_by_fields' in data:
             assert isinstance(data['group_by_fields'], list), 'Group by fields need to list of dict'
-            data['group_by_fields'] = [int(x['field']) for x in data['group_by_fields']]
+            data['group_by_fields'] = [x['field'] for x in data['group_by_fields']]
 
         path_subset = self.extract_paths_subset(
             [self.field_mapping[field_id][self.TABLE_NAME] for field_id in data['fields']],
@@ -529,8 +526,8 @@ class JSON2SQLGenerator(object):
     def generate_subquery(self, subqueries, alias_params):
         result = []
         for subquery_dict in subqueries:
-            if 'id' in subquery_dict:
-                subquery = self.subquery_mapping[subquery_dict['id']]
+            if 'unique_id' in subquery_dict:
+                subquery = self.subquery_mapping[subquery_dict['unique_id']]
 
                 # Validate given subquery
                 self._validate_subquery(subquery)
@@ -580,8 +577,8 @@ class JSON2SQLGenerator(object):
         """
         if select_fields:
             select_phrase = []
-            for select_field_id, select_field_data in select_fields.items():
-                if isinstance(select_field_data['field'], int):
+            for select_field_alias, select_field_data in select_fields.items():
+                if select_field_alias != 'member_id':
                     field_name = self.field_mapping[select_field_data['field']][self.FIELD_NAME]
                     table = self._get_table_name(select_field_data['field'])
                 else:
@@ -724,10 +721,7 @@ class JSON2SQLGenerator(object):
         if sql_operator == self.VALUE_OPERATORS.is_op:
             value_in_upper_case = value.upper()
             if data_type == self.STRING:
-                assert(
-                    value_in_upper_case in self.IS_OPERATOR_VALUES_FOR_STRING,
-                    'Invalid rhs for `IS` operator'
-                )
+                assert value_in_upper_case in self.IS_OPERATOR_VALUES_FOR_STRING, 'Invalid rhs for `IS` operator'
                 sql_operator = (
                     self.VALUE_OPERATORS.not_equals if 'NOT' in value_in_upper_case
                     else self.VALUE_OPERATORS.equals
