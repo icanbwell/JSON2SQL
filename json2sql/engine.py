@@ -121,6 +121,7 @@ class JSON2SQLGenerator(object):
 
     JOIN_TABLE = 'join_table'
     JOIN_COLUMN = 'join_column'
+    JOIN_TABLE_ACTIVE_FIELD = 'join_table_active_field'
     PARENT_TABLE = 'parent_table'
     PARENT_COLUMN = 'parent_column'
 
@@ -405,13 +406,14 @@ class JSON2SQLGenerator(object):
         :return: (dict) dict in the format {'join_table': {'parent_table': {'parent_field': , 'join_field':} }}
         """
         path_map = defaultdict(dict)
-        for join_tbl, join_fld, parent_tbl, parent_fld in paths:
+        for join_tbl, join_fld, parent_tbl, parent_fld, join_tbl_active_fld in paths:
             # We can support if there are multiple ways to join a table
             # We don't support if there are multiple fields on join table path
             assert parent_tbl not in path_map[join_tbl], 'Joins with multiple fields is not supported'
             path_map[join_tbl][parent_tbl] = {
                 self.PARENT_COLUMN: parent_fld,
-                self.JOIN_COLUMN: join_fld
+                self.JOIN_COLUMN: join_fld,
+                self.JOIN_TABLE_ACTIVE_FIELD: join_tbl_active_fld,
             }
 
         return path_map
@@ -492,13 +494,20 @@ class JSON2SQLGenerator(object):
     def generate_left_join(self, join_path):
         join_phrases = []
         for join_table, parent_table in join_path:
-            join_phrases.append(
-                'LEFT JOIN {join_tbl} ON {join_tbl}.{join_fld} = {parent_tbl}.{parent_fld}'.format(
-                    join_tbl=join_table,
-                    parent_tbl=parent_table,
-                    join_fld=self.path_mapping[join_table][parent_table][self.JOIN_COLUMN],
-                    parent_fld=self.path_mapping[join_table][parent_table][self.PARENT_COLUMN]
+            join_condition = '{join_tbl}.{join_fld} = {parent_tbl}.{parent_fld}'.format(
+                join_tbl=join_table,
+                parent_tbl=parent_table,
+                join_fld=self.path_mapping[join_table][parent_table][self.JOIN_COLUMN],
+                parent_fld=self.path_mapping[join_table][parent_table][self.PARENT_COLUMN]
+            )
+            join_table_active_field = self.path_mapping[join_table][parent_table][self.JOIN_TABLE_ACTIVE_FIELD]
+            # If join table has a field which specifies if row is soft deleted or not then add it in join condition
+            if join_table_active_field:
+                join_condition = '({join_condition} AND {join_tbl}.{join_table_active_field} = TRUE)'.format(
+                    join_condition=join_condition, join_tbl=join_table, join_table_active_field=join_table_active_field
                 )
+            join_phrases.append(
+                'LEFT JOIN {join_tbl} ON {join_condition}'.format(join_tbl=join_table, join_condition=join_condition)
             )
 
         return ' '.join(join_phrases)
