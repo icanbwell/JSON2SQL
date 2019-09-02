@@ -751,9 +751,6 @@ class JSON2SQLGenerator(object):
                 assert value_in_upper_case in self.IS_OPERATOR_VALUE, 'Invalid rhs for `IS` operator'
             sql_value, secondary_sql_value = value, None
         else:
-            sql_value = self._get_sql_value(value, data_type)
-            secondary_sql_value = self._get_sql_value(secondary_value, data_type)
-
             # Update value if operator is in like operators
             if data_type == self.STRING and operator in self.LIKE_OPERATORS:
                 if operator == self.STARTS_WITH:
@@ -762,7 +759,10 @@ class JSON2SQLGenerator(object):
                     like_value = '%%{value}'
                 else:
                     like_value = '%%{value}%%'
-                sql_value = like_value.format(value=sql_value)
+                value = like_value.format(value=value)
+
+            sql_value = self._get_sql_value(value, data_type)
+            secondary_sql_value = self._get_sql_value(secondary_value, data_type)
 
         lhs = u'`{table}`.`{field}`'.format(table=table, field=field_name)  # type: unicode
 
