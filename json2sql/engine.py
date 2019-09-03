@@ -972,12 +972,10 @@ class JSON2SQLGenerator(object):
         template_data = self.variable_templates[variable_template_id]
         variable_template_keyword = template_data[self.VARIABLE_TEMPLATE_KEYWORD]
         # Check if data type of field is equal to the return type of variable template
-        assert template_data[self.VARIABLE_TEMPLATE_RETURN_TYPE] == (
-            data_type,
+        assert template_data[self.VARIABLE_TEMPLATE_RETURN_TYPE] == data_type,\
             'Data type of field does not match return type of {template} variable template'.format(
                 template=variable_template_keyword
             )
-        )
         return '{{{keyword}}}'.format(keyword=variable_template_keyword)
 
     def _parse_and(self, data):
