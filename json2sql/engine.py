@@ -312,7 +312,8 @@ class JSON2SQLGenerator(object):
 
         value = parameter_data.get('value')
         if value:
-            self._sanitize_value(parameter_data['value'], data_type.lower())
+            if data_type.upper() != 'DATE':
+                self._sanitize_value(parameter_data['value'], data_type.lower())
             if data_type.upper() == 'FIELD':
                 field_data = self.field_mapping[parameter_data['field']]
                 return "`{table}`.`{field}`".format(
@@ -323,8 +324,7 @@ class JSON2SQLGenerator(object):
             elif data_type.upper() == 'STRING':
                 return "'{value}'".format(value=self._sql_injection_proof(value))
             elif data_type.upper() == 'DATE':
-                (value, ) = self._convert_values([value], data_type)
-                return value
+                return self._get_sql_value(value, data_type)
             elif data_type.upper() == 'OPERATOR':
                 return getattr(self.VALUE_OPERATORS, value)
             elif data_type.upper() == 'BOOLEAN':
