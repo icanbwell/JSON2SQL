@@ -33,10 +33,15 @@ class JSON2SQLGenerator(object):
     NULLBOOLEAN = 'nullboolean'
     CHOICE = 'choice'
     MULTICHOICE = 'multichoice'
+    EXIST = 'exist'
 
     CONVERSION_REQUIRED = [
         STRING, DATE, DATE_TIME
     ]
+
+    # Boolean Values
+    TRUE = 'TRUE'
+    FALSE = 'FALSE'
 
     # Maintain a set of binary operators
     BETWEEN = 'between'
@@ -50,7 +55,10 @@ class JSON2SQLGenerator(object):
 
     # Is operator values
     IS_OPERATOR_VALUES_FOR_STRING = {'EMPTY', 'NOT EMPTY'}
-    IS_OPERATOR_VALUE = {'NULL', 'NOT NULL', 'TRUE', 'FALSE'}
+    IS_OPERATOR_VALUE = {'NULL', 'NOT NULL', TRUE, FALSE}
+
+    # Is Present operator values
+    IS_PRESENT_OPERATOR_VALUE = {TRUE, FALSE}
 
     # Like operators
     STARTS_WITH = 'starts_with'
@@ -80,7 +88,8 @@ class JSON2SQLGenerator(object):
         'greater_than_equals', 'less_than_equals',
         'not_equals', 'is_op', 'in_op', 'like', 'between',
         'is_challenge_completed', 'is_challenge_not_completed',
-        'starts_with', 'ends_with', 'has_substring', 'verifies_regex'
+        'starts_with', 'ends_with', 'has_substring', 'verifies_regex',
+        'is_present',
     ])(
         equals='=',
         greater_than='>',
@@ -97,7 +106,8 @@ class JSON2SQLGenerator(object):
         starts_with='LIKE',
         ends_with='LIKE',
         has_substring='LIKE',
-        verifies_regex='REGEXP'
+        verifies_regex='REGEXP',
+        is_present='is_present',
     )
 
     DATA_TYPES = namedtuple('DATA_TYPES', [
@@ -312,22 +322,23 @@ class JSON2SQLGenerator(object):
 
         value = parameter_data.get('value')
         if value:
-            self._sanitize_value(parameter_data['value'], data_type.lower())
-            if data_type.upper() == 'FIELD':
+            data_type_upper = data_type.upper()
+            if data_type_upper != 'DATE':
+                self._sanitize_value(value, data_type.lower())
+            if data_type_upper == 'FIELD':
                 field_data = self.field_mapping[parameter_data['field']]
                 return "`{table}`.`{field}`".format(
                     table=field_data[self.TABLE_NAME], field=field_data[self.FIELD_NAME]
                 )
-            elif data_type.upper() == 'INTEGER':
+            elif data_type_upper == 'INTEGER':
                 return int(value)
-            elif data_type.upper() == 'STRING':
+            elif data_type_upper == 'STRING':
                 return "'{value}'".format(value=self._sql_injection_proof(value))
-            elif data_type.upper() == 'DATE':
-                (value, ) = self._convert_values([value], data_type)
-                return value
-            elif data_type.upper() == 'OPERATOR':
+            elif data_type_upper == 'DATE':
+                return self._get_sql_value(value, data_type)
+            elif data_type_upper == 'OPERATOR':
                 return getattr(self.VALUE_OPERATORS, value)
-            elif data_type.upper() == 'BOOLEAN':
+            elif data_type_upper == 'BOOLEAN':
                 value = value.upper()
                 assert value in self.IS_OPERATOR_VALUE, 'Invalid value for boolean type'
                 return value
@@ -784,6 +795,17 @@ class JSON2SQLGenerator(object):
                     else ''
                 ),
                 check=self.CHALLENGE_CHECK_QUERY.format(value=sql_value)
+            )
+
+        # Generate SQL phrase for is_present value operator
+        if sql_operator == self.VALUE_OPERATORS.is_present:
+            value_in_upper_case = sql_value.upper()
+            assert value_in_upper_case in self.IS_PRESENT_OPERATOR_VALUE, 'Invalid rhs for `is_present` operator'
+            is_present = value_in_upper_case == self.TRUE
+            return "{lhs} IS {null_negate}NULL {operator} {lhs} {empty_negate}= ''".format(
+                lhs=lhs, null_negate='NOT ' if is_present else '',
+                empty_negate='!' if is_present else '',
+                operator=self.AND_CONDITION if is_present else self.OR_CONDITION
             )
 
         # Generate SQL phrase
