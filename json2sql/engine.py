@@ -312,22 +312,23 @@ class JSON2SQLGenerator(object):
 
         value = parameter_data.get('value')
         if value:
-            self._sanitize_value(parameter_data['value'], data_type.lower())
-            if data_type.upper() == 'FIELD':
+            data_type_upper = data_type.upper()
+            if data_type_upper != 'DATE':
+                self._sanitize_value(value, data_type.lower())
+            if data_type_upper == 'FIELD':
                 field_data = self.field_mapping[parameter_data['field']]
                 return "`{table}`.`{field}`".format(
                     table=field_data[self.TABLE_NAME], field=field_data[self.FIELD_NAME]
                 )
-            elif data_type.upper() == 'INTEGER':
+            elif data_type_upper == 'INTEGER':
                 return int(value)
-            elif data_type.upper() == 'STRING':
+            elif data_type_upper == 'STRING':
                 return "'{value}'".format(value=self._sql_injection_proof(value))
-            elif data_type.upper() == 'DATE':
-                (value, ) = self._convert_values([value], data_type)
-                return value
-            elif data_type.upper() == 'OPERATOR':
+            elif data_type_upper == 'DATE':
+                return self._get_sql_value(value, data_type)
+            elif data_type_upper == 'OPERATOR':
                 return getattr(self.VALUE_OPERATORS, value)
-            elif data_type.upper() == 'BOOLEAN':
+            elif data_type_upper == 'BOOLEAN':
                 value = value.upper()
                 assert value in self.IS_OPERATOR_VALUE, 'Invalid value for boolean type'
                 return value
