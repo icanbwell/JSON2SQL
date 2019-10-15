@@ -39,6 +39,10 @@ class JSON2SQLGenerator(object):
         STRING, DATE, DATE_TIME
     ]
 
+    # Boolean Values
+    TRUE = 'TRUE'
+    FALSE = 'FALSE'
+
     # Maintain a set of binary operators
     BETWEEN = 'between'
     BINARY_OPERATORS = (BETWEEN, )
@@ -51,9 +55,10 @@ class JSON2SQLGenerator(object):
 
     # Is operator values
     IS_OPERATOR_VALUES_FOR_STRING = {'EMPTY', 'NOT EMPTY'}
-    IS_OPERATOR_VALUE = {'NULL', 'NOT NULL', 'TRUE', 'FALSE'}
+    IS_OPERATOR_VALUE = {'NULL', 'NOT NULL', TRUE, FALSE}
 
-    IS_PRESENT_OPERATOR_VALUE = {'TRUE', 'FALSE'}
+    # Is Present operator values
+    IS_PRESENT_OPERATOR_VALUE = {TRUE, FALSE}
 
     # Like operators
     STARTS_WITH = 'starts_with'
@@ -795,11 +800,11 @@ class JSON2SQLGenerator(object):
         if sql_operator == self.VALUE_OPERATORS.is_present:
             value_in_upper_case = sql_value.upper()
             assert value_in_upper_case in self.IS_PRESENT_OPERATOR_VALUE, 'Invalid rhs for `is_present` operator'
-            is_present = value_in_upper_case == 'TRUE'
-            return "{lhs} IS {null_negate} NULL {op} {lhs} {empty_negate}= ''".format(
-                lhs=lhs, null_negate='NOT' if is_present else '',
+            is_present = value_in_upper_case == self.TRUE
+            return "{lhs} IS {null_negate}NULL {operator} {lhs} {empty_negate}= ''".format(
+                lhs=lhs, null_negate='NOT ' if is_present else '',
                 empty_negate='!' if is_present else '',
-                op='OR' if is_present else 'AND'
+                operator=self.AND_CONDITION if is_present else self.OR_CONDITION
             )
 
         # Generate SQL phrase
