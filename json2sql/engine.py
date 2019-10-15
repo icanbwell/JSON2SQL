@@ -33,6 +33,7 @@ class JSON2SQLGenerator(object):
     NULLBOOLEAN = 'nullboolean'
     CHOICE = 'choice'
     MULTICHOICE = 'multichoice'
+    EXIST = 'exist'
 
     CONVERSION_REQUIRED = [
         STRING, DATE, DATE_TIME
@@ -51,6 +52,8 @@ class JSON2SQLGenerator(object):
     # Is operator values
     IS_OPERATOR_VALUES_FOR_STRING = {'EMPTY', 'NOT EMPTY'}
     IS_OPERATOR_VALUE = {'NULL', 'NOT NULL', 'TRUE', 'FALSE'}
+
+    IS_PRESENT_OPERATOR_VALUE = {'TRUE', 'FALSE'}
 
     # Like operators
     STARTS_WITH = 'starts_with'
@@ -80,7 +83,8 @@ class JSON2SQLGenerator(object):
         'greater_than_equals', 'less_than_equals',
         'not_equals', 'is_op', 'in_op', 'like', 'between',
         'is_challenge_completed', 'is_challenge_not_completed',
-        'starts_with', 'ends_with', 'has_substring', 'verifies_regex'
+        'starts_with', 'ends_with', 'has_substring', 'verifies_regex',
+        'is_present',
     ])(
         equals='=',
         greater_than='>',
@@ -97,7 +101,8 @@ class JSON2SQLGenerator(object):
         starts_with='LIKE',
         ends_with='LIKE',
         has_substring='LIKE',
-        verifies_regex='REGEXP'
+        verifies_regex='REGEXP',
+        is_present='is_present',
     )
 
     DATA_TYPES = namedtuple('DATA_TYPES', [
@@ -784,6 +789,17 @@ class JSON2SQLGenerator(object):
                     else ''
                 ),
                 check=self.CHALLENGE_CHECK_QUERY.format(value=sql_value)
+            )
+
+        # Generate SQL phrase for is_present value operator
+        if sql_operator == self.VALUE_OPERATORS.is_present:
+            value_in_upper_case = sql_value.upper()
+            assert value_in_upper_case in self.IS_PRESENT_OPERATOR_VALUE, 'Invalid rhs for `is_present` operator'
+            is_present = value_in_upper_case == 'TRUE'
+            return "{lhs} IS {null_negate} NULL {op} {lhs} {empty_negate}= ''".format(
+                lhs=lhs, null_negate='NOT' if is_present else '',
+                empty_negate='!' if is_present else '',
+                op='OR' if is_present else 'AND'
             )
 
         # Generate SQL phrase
