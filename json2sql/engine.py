@@ -800,6 +800,9 @@ class JSON2SQLGenerator(object):
         # Generate SQL phrase for is_present value operator
         if sql_operator == self.VALUE_OPERATORS.is_present:
             value_in_upper_case = sql_value.upper()
+            # Strip quotes if data type is choice
+            if data_type == self.CHOICE:
+                value_in_upper_case = value_in_upper_case.strip('\'')
             assert value_in_upper_case in self.IS_PRESENT_OPERATOR_VALUE, 'Invalid rhs for `is_present` operator'
             is_present = value_in_upper_case == self.TRUE
             return "{lhs} IS {null_negate}NULL {operator} {lhs} {empty_negate}= ''".format(
