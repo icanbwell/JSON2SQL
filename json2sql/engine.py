@@ -343,7 +343,7 @@ class JSON2SQLGenerator(object):
                 assert value in self.IS_OPERATOR_VALUE, 'Invalid value for boolean type'
                 return value
             elif data_type_upper == 'VARIABLE_TEMPLATE':
-                return "{{{value}}}".format(value=self._sql_injection_proof(value))
+                return '{{{value}}}'.format(value=self._sql_injection_proof(value))
             else:
                 raise AttributeError(
                     "Unsupported data type for parameter: {type}".format(type=data_type)
