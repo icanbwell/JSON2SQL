@@ -51,7 +51,7 @@ class JSON2SQLGenerator(object):
     ALLOWED_AGGREGATE_FUNCTIONS = {'MIN', 'MAX', 'COUNT'}
 
     # Custom methods field types
-    ALLOWED_CUSTOM_METHOD_PARAM_TYPES = {'field', 'integer', 'string', 'date', 'operator', 'boolean'}
+    ALLOWED_CUSTOM_METHOD_PARAM_TYPES = {'field', 'integer', 'string', 'date', 'operator', 'boolean', 'variable_template'}
 
     # Is operator values
     IS_OPERATOR_VALUES_FOR_STRING = {'EMPTY', 'NOT EMPTY'}
@@ -342,6 +342,8 @@ class JSON2SQLGenerator(object):
                 value = value.upper()
                 assert value in self.IS_OPERATOR_VALUE, 'Invalid value for boolean type'
                 return value
+            elif data_type_upper == 'VARIABLE_TEMPLATE':
+                return '{{{value}}}'.format(value=self._sql_injection_proof(value))
             else:
                 raise AttributeError(
                     "Unsupported data type for parameter: {type}".format(type=data_type)
