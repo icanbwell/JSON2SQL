@@ -1,3 +1,6 @@
+from __future__ import unicode_literals
+from builtins import str
+from builtins import object
 import datetime
 import json
 import logging
@@ -215,7 +218,7 @@ class JSON2SQLGenerator(object):
             assert not set(parameters.keys()) ^ template_defined_variables, 'Extra variable defined'
             # Checks parameter types are permitted
             assert not {
-                l['data_type'] for l in parameters.values()
+                l['data_type'] for l in list(parameters.values())
             } - self.ALLOWED_CUSTOM_METHOD_PARAM_TYPES, 'Invalid data type defined'
 
             template_mapping[template_id] = {
@@ -245,7 +248,7 @@ class JSON2SQLGenerator(object):
                 assert not set(parameters.keys()) ^ template_variables, 'Extra variable defined'
                 # Checks parameter types are permitted
                 assert not {
-                    l['data_type'] for l in parameters.values()
+                    l['data_type'] for l in list(parameters.values())
                 } - self.ALLOWED_CUSTOM_METHOD_PARAM_TYPES, 'Invalid data type defined'
         else:
             assert isinstance(
@@ -303,14 +306,14 @@ class JSON2SQLGenerator(object):
 
         # Process parameters
         validated_parameters = {}
-        for param_id, param_data in data.get('parameters', {}).items():
+        for param_id, param_data in list(data.get('parameters', {}).items()):
             assert param_id in template_data[self.TEMPLATE_PARAMS_KEY], 'Invalid parameter name.'
             param_type = template_data[self.TEMPLATE_PARAMS_KEY][param_id]['data_type']
 
             validated_parameters[param_id] = self._process_parameter(param_type, param_data)
 
         # Check that we have collected all the required keys
-        template_params = template_data[self.TEMPLATE_PARAMS_KEY].keys()
+        template_params = list(template_data[self.TEMPLATE_PARAMS_KEY].keys())
         assert len(set(template_params) ^ set(validated_parameters.keys())) == 0, \
             'Missing or extra template variable'
 
@@ -477,7 +480,7 @@ class JSON2SQLGenerator(object):
                 parent_node = path_hints[curr_node]
                 traversal_nodes.append(parent_node)
             elif len(next_nodes) == 1:
-                parent_node = next_nodes.keys()[0]
+                parent_node = list(next_nodes.keys())[0]
                 traversal_nodes.append(parent_node)
             else:
                 raise Exception("No path hint provided for `{curr_node}`".format(curr_node=curr_node))
@@ -551,7 +554,7 @@ class JSON2SQLGenerator(object):
         ]
 
         result += 'GROUP BY {fields}'.format(fields=', '.join(fully_qualified_field_names))
-        if having_clause.keys():
+        if list(having_clause.keys()):
             result += ' HAVING {condition}'.format(condition=self._generate_sql_condition(having_clause))
 
         return result
@@ -571,7 +574,7 @@ class JSON2SQLGenerator(object):
 
                 select_fields = subquery[self.SUBQUERY_FIELDS_KEY]
                 join_fld = None
-                for select_field_id, select_field_data in select_fields.items():
+                for select_field_id, select_field_data in list(select_fields.items()):
                     if select_field_data.get('is_member_id'):
                         assert 'alias' in select_field_data, 'Alias is required for {id} field'.format(
                             id=select_field_id
@@ -581,7 +584,7 @@ class JSON2SQLGenerator(object):
                 if subquery[self.SUBQUERY_IS_SQL]:
                     # Process parameters
                     validated_parameters = {}
-                    for param_id, param_data in alias_params.get(alias, {}).items():
+                    for param_id, param_data in list(alias_params.get(alias, {}).items()):
                         assert param_id in subquery[self.SUBQUERY_PARAMS_KEY], 'Invalid parameter name.'
                         param_type = subquery[self.SUBQUERY_PARAMS_KEY][param_id]['data_type']
 
@@ -610,7 +613,7 @@ class JSON2SQLGenerator(object):
         """
         if select_fields:
             select_phrase = []
-            for select_field_alias, select_field_data in select_fields.items():
+            for select_field_alias, select_field_data in list(select_fields.items()):
                 if select_field_alias != 'member_id':
                     field_name = self.field_mapping[select_field_data['field']][self.FIELD_NAME]
                     table = self._get_table_name(select_field_data['field'])
@@ -684,7 +687,7 @@ class JSON2SQLGenerator(object):
         # Check if data is not blank
         if data:
             # Get the first key in dict.
-            condition = data.keys()[0]
+            condition = list(data.keys())[0]
             # Call the function mapped to the condition
             function = getattr(self, self.WHERE_CONDITION_MAPPING.get(condition))
             result = function(data[condition])
@@ -1058,7 +1061,7 @@ class JSON2SQLGenerator(object):
         sql = bytearray()
         for element in data:
             # Get the first key in the dict.
-            inner_condition = element.keys()[0]
+            inner_condition = list(element.keys())[0]
             function = getattr(self, self.WHERE_CONDITION_MAPPING.get(inner_condition))
             # Call the function mapped to it.
             result = function(element.get(inner_condition))
@@ -1103,7 +1106,7 @@ class JSON2SQLGenerator(object):
         assert isinstance(target_dict, dict)
         assert isinstance(key, str) and key
 
-        for k, v in target_dict.items():
+        for k, v in list(target_dict.items()):
             if k == key:
                 yield v
             elif isinstance(v, dict):
