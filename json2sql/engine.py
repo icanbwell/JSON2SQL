@@ -477,7 +477,7 @@ class JSON2SQLGenerator(object):
                 parent_node = path_hints[curr_node]
                 traversal_nodes.append(parent_node)
             elif len(next_nodes) == 1:
-                parent_node = next_nodes.keys()[0]
+                parent_node = list(next_nodes.keys())[0]
                 traversal_nodes.append(parent_node)
             else:
                 raise Exception("No path hint provided for `{curr_node}`".format(curr_node=curr_node))
@@ -551,7 +551,7 @@ class JSON2SQLGenerator(object):
         ]
 
         result += 'GROUP BY {fields}'.format(fields=', '.join(fully_qualified_field_names))
-        if having_clause.keys():
+        if list(having_clause.keys()):
             result += ' HAVING {condition}'.format(condition=self._generate_sql_condition(having_clause))
 
         return result
@@ -684,7 +684,7 @@ class JSON2SQLGenerator(object):
         # Check if data is not blank
         if data:
             # Get the first key in dict.
-            condition = data.keys()[0]
+            condition = list(data.keys())[0]
             # Call the function mapped to the condition
             function = getattr(self, self.WHERE_CONDITION_MAPPING.get(condition))
             result = function(data[condition])
@@ -1058,7 +1058,7 @@ class JSON2SQLGenerator(object):
         sql = bytearray()
         for element in data:
             # Get the first key in the dict.
-            inner_condition = element.keys()[0]
+            inner_condition = list(element.keys())[0]
             function = getattr(self, self.WHERE_CONDITION_MAPPING.get(inner_condition))
             # Call the function mapped to it.
             result = function(element.get(inner_condition))
