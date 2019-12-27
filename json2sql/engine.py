@@ -1064,11 +1064,10 @@ class JSON2SQLGenerator(object):
             result = function(element.get(inner_condition))
             # Append the result to the sql.
             if not sql and condition in [self.AND_CONDITION, self.OR_CONDITION]:
-                sql.extend('({result})'.format(result=result))
+                sql_result = '({result})'.format(result=result)
             else:
-                sql.extend(' {condition} ({result})'.format(
-                    condition=condition, result=result)
-                )
+                sql_result = ' {condition} ({result})'.format(condition=condition, result=result)
+            sql.extend(sql_result.encode('utf8'))
         return u'({sql})'.format(sql=sql.decode('utf8'))
 
     def _parse_field_mapping(self, field_mapping):
