@@ -1090,7 +1090,7 @@ class JSON2SQLGenerator(object):
         :param value: (string|unicode) string that needs to be escaped
         :return: (string|unicode) escaped string
         """
-        return MySQLdb.escape_string(value)
+        return MySQLdb.escape_string(value).decode('utf8')
 
     def extract_key_from_nested_dict(self, target_dict, key):
         """
