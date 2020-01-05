@@ -1003,7 +1003,8 @@ class JSON2SQLGenerator(object):
             'Data type of field does not match return type of {template} variable template'.format(
                 template=variable_template_keyword
             )
-        return '{{{keyword}}}'.format(keyword=variable_template_keyword)
+        (sql_value,) = self._convert_values(['{{{keyword}}}'.format(keyword=variable_template_keyword)], data_type)
+        return sql_value
 
     def _parse_and(self, data):
         """
